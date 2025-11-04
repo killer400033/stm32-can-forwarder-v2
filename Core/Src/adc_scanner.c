@@ -6,6 +6,9 @@
 #include "cmsis_os.h"
 #include "forwarder_pb.pb.h"
 #include "can_driver.h"
+#include "dbc.h"
+#include "log_handler.h"
+#include "app_layer.h"
 
 // ADC completion tracking
 static bool adc1_complete = false;
@@ -35,6 +38,7 @@ const osThreadAttr_t adcPacketTask_attributes = {
 };
 
 void adcPacketThread(void *argument);
+static void pushToWSandCAN(CanFrame *frame, uint8_t length);
 
 void ADC_Scanner_Init(TIM_HandleTypeDef *htim)
 {
@@ -138,7 +142,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
       osMessageQueuePut(adcQueueHandle, &data, 0, 0);
     }
     else {
-        // TODO: Implement error handling for dropped messages
+        log_msg(LL_ERR, "ADC queue is full");
     }
     
     // Stop DMA conversions
@@ -157,118 +161,69 @@ void adcPacketThread(void *argument)
     // Wait for ADC data from queue
     if (osMessageQueueGet(adcQueueHandle, &adcData, NULL, osWaitForever) == osOK) {
       
+      // Reusable CAN frame for all messages
+      CanFrame frame = {0};
+      frame.can_bus = 0;
+      frame.timestamp = adcData.timestamp;
+
       // Create CAN frame for coolant and oil temperature sensors (CAN ID 910)
-      CanFrame tempFrame = {0};
-      tempFrame.can_id = 910;
-      tempFrame.can_bus = 0;  // Using CAN bus 0 (hfdcan1)
-      tempFrame.timestamp = adcData.timestamp;
+      TEMPERATURES_t tempMsg = {0};
+      tempMsg.OilTemp0 = adcData.gearbox_temp[0];
+      tempMsg.OilTemp1 = adcData.gearbox_temp[1];
+      tempMsg.CoolantTemp0 = adcData.coolant_temp[0];
+      tempMsg.CoolantTemp1 = adcData.coolant_temp[1];
       
-      // Scale temperatures to 0.01°C resolution and pack as 16-bit values
-      int16_t oil_temp_0 = (int16_t)(adcData.gearbox_temp[0] / 0.01f);
-      int16_t oil_temp_1 = (int16_t)(adcData.gearbox_temp[1] / 0.01f);
-      int16_t coolant_temp_0 = (int16_t)(adcData.coolant_temp[0] / 0.01f);
-      int16_t coolant_temp_1 = (int16_t)(adcData.coolant_temp[1] / 0.01f);
-      
-      tempFrame.can_data[0] = (oil_temp_0 >> 8) & 0xFF;
-      tempFrame.can_data[1] = oil_temp_0 & 0xFF;
-      tempFrame.can_data[2] = (oil_temp_1 >> 8) & 0xFF;
-      tempFrame.can_data[3] = oil_temp_1 & 0xFF;
-      tempFrame.can_data[4] = (coolant_temp_0 >> 8) & 0xFF;
-      tempFrame.can_data[5] = coolant_temp_0 & 0xFF;
-      tempFrame.can_data[6] = (coolant_temp_1 >> 8) & 0xFF;
-      tempFrame.can_data[7] = coolant_temp_1 & 0xFF;
-      
-      // Push temperature frame to WebSocket CAN queue
-      if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
-        osMessageQueuePut(wsCanQueueHandle, &tempFrame, 0, 0);
-      }
-      
-      // Send temperature frame through CAN bus
-      if (sendCanFrame(tempFrame.can_id, tempFrame.can_bus, tempFrame.can_data, 8) != 0) {
-        // TODO: Implement error handling for failed CAN transmission
+      if (Pack_TEMPERATURES(&tempMsg, frame.can_data, 8) == STATUS_OK) {
+        frame.can_id = 910;
+        pushToWSandCAN(&frame, 8);
       }
 
       // Create CAN frame for potentiometers (CAN ID 911)
-      CanFrame potFrame = {0};
-      potFrame.can_id = 911;
-      potFrame.can_bus = 0;  // Using CAN bus 0 (hfdcan1)
-      potFrame.timestamp = adcData.timestamp;
+      POTENTIOMETERS_t potMsg = {0};
+      potMsg.Potentiometer0 = adcData.pot_voltages[0];
+      potMsg.Potentiometer1 = adcData.pot_voltages[1];
       
-      // Scale potentiometer voltages to 0.001V resolution and pack as 16-bit values
-      int16_t pot_0 = (int16_t)(adcData.pot_voltages[0] / 0.001f);
-      int16_t pot_1 = (int16_t)(adcData.pot_voltages[1] / 0.001f);
-      
-      potFrame.can_data[0] = (pot_0 >> 8) & 0xFF;
-      potFrame.can_data[1] = pot_0 & 0xFF;
-      potFrame.can_data[2] = (pot_1 >> 8) & 0xFF;
-      potFrame.can_data[3] = pot_1 & 0xFF;
-      
-      // Push potentiometer frame to WebSocket CAN queue
-      if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
-        osMessageQueuePut(wsCanQueueHandle, &potFrame, 0, 0);
-      }
-      
-      // Send potentiometer frame through CAN bus
-      if (sendCanFrame(potFrame.can_id, potFrame.can_bus, potFrame.can_data, 4) != 0) {
-        // TODO: Implement error handling for failed CAN transmission
+      if (Pack_POTENTIOMETERS(&potMsg, frame.can_data, 8) == STATUS_OK) {
+        frame.can_id = 911;
+        pushToWSandCAN(&frame, 4);
       }
 
       // Create CAN frame for strain gauge linkages (CAN ID 913)
-      CanFrame strainLinkFrame = {0};
-      strainLinkFrame.can_id = 913;
-      strainLinkFrame.can_bus = 0;  // Using CAN bus 0 (hfdcan1)
-      strainLinkFrame.timestamp = adcData.timestamp;
+      STRAIN_GAUGE_LINKAGES_t strainLinkMsg = {0};
+      strainLinkMsg.StrainLinkage0 = (int16_t)adcData.strain_voltages[0];
+      strainLinkMsg.StrainLinkage1 = (int16_t)adcData.strain_voltages[1];
+      strainLinkMsg.StrainLinkage2 = (int16_t)adcData.strain_voltages[2];
+      strainLinkMsg.StrainLinkage3 = (int16_t)adcData.strain_voltages[3];
       
-      // Scale strain voltages to 1V resolution and pack as 16-bit values
-      int16_t strain_0 = (int16_t)(adcData.strain_voltages[0] / 1.0f);
-      int16_t strain_1 = (int16_t)(adcData.strain_voltages[1] / 1.0f);
-      int16_t strain_2 = (int16_t)(adcData.strain_voltages[2] / 1.0f);
-      int16_t strain_3 = (int16_t)(adcData.strain_voltages[3] / 1.0f);
-      
-      strainLinkFrame.can_data[0] = (strain_0 >> 8) & 0xFF;
-      strainLinkFrame.can_data[1] = strain_0 & 0xFF;
-      strainLinkFrame.can_data[2] = (strain_1 >> 8) & 0xFF;
-      strainLinkFrame.can_data[3] = strain_1 & 0xFF;
-      strainLinkFrame.can_data[4] = (strain_2 >> 8) & 0xFF;
-      strainLinkFrame.can_data[5] = strain_2 & 0xFF;
-      strainLinkFrame.can_data[6] = (strain_3 >> 8) & 0xFF;
-      strainLinkFrame.can_data[7] = strain_3 & 0xFF;
-      
-      // Push strain linkage frame to WebSocket CAN queue
-      if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
-        osMessageQueuePut(wsCanQueueHandle, &strainLinkFrame, 0, 0);
-      }
-      
-      // Send strain linkage frame through CAN bus
-      if (sendCanFrame(strainLinkFrame.can_id, strainLinkFrame.can_bus, strainLinkFrame.can_data, 8) != 0) {
-        // TODO: Implement error handling for failed CAN transmission
+      if (Pack_STRAIN_GAUGE_LINKAGES(&strainLinkMsg, frame.can_data, 8) == STATUS_OK) {
+        frame.can_id = 913;
+        pushToWSandCAN(&frame, 8);
       }
 
       // Create CAN frame for strain gauge steering column (CAN ID 915)
-      CanFrame strainSteerFrame = {0};
-      strainSteerFrame.can_id = 915;
-      strainSteerFrame.can_bus = 0;  // Using CAN bus 0 (hfdcan1)
-      strainSteerFrame.timestamp = adcData.timestamp;
+      STRAIN_GAUGE_STEERING_t strainSteerMsg = {0};
+      strainSteerMsg.StrainSteering0 = (int16_t)adcData.strain_voltages[4];
+      strainSteerMsg.StrainSteering1 = (int16_t)adcData.strain_voltages[5];
       
-      // Scale strain voltages to 1V resolution and pack as 16-bit values
-      int16_t strain_4 = (int16_t)(adcData.strain_voltages[4] / 1.0f);
-      int16_t strain_5 = (int16_t)(adcData.strain_voltages[5] / 1.0f);
-      
-      strainSteerFrame.can_data[0] = (strain_4 >> 8) & 0xFF;
-      strainSteerFrame.can_data[1] = strain_4 & 0xFF;
-      strainSteerFrame.can_data[2] = (strain_5 >> 8) & 0xFF;
-      strainSteerFrame.can_data[3] = strain_5 & 0xFF;
-      
-      // Push strain steering frame to WebSocket CAN queue
-      if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
-        osMessageQueuePut(wsCanQueueHandle, &strainSteerFrame, 0, 0);
-      }
-      
-      // Send strain steering frame through CAN bus
-      if (sendCanFrame(strainSteerFrame.can_id, strainSteerFrame.can_bus, strainSteerFrame.can_data, 4) != 0) {
-        // TODO: Implement error handling for failed CAN transmission
+      if (Pack_STRAIN_GAUGE_STEERING(&strainSteerMsg, frame.can_data, 8) == STATUS_OK) {
+        frame.can_id = 915;
+        pushToWSandCAN(&frame, 4);
       }
     }
+  }
+}
+
+static void pushToWSandCAN(CanFrame *frame, uint8_t length)
+{
+  if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
+    osMessageQueuePut(wsCanQueueHandle, frame, 0, 0);
+  }
+  else {
+    // TODO: Implement error handling for dropped messages
+    dropped_packets++;
+  }
+  if (sendCanFrame(frame->can_id, frame->can_bus, frame->can_data, length) != 0) {
+    log_msg(LL_ERR, "Failed to send CAN ID %d through bus %d", frame->can_id, frame->can_bus);
   }
 }
 

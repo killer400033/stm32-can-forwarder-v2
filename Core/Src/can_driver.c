@@ -8,6 +8,7 @@
 #include "forwarder_pb.pb.h"
 #include "cmsis_os.h"
 #include "app_layer.h"
+#include "log_handler.h"
 
 extern FDCAN_HandleTypeDef hfdcan1;
 extern FDCAN_HandleTypeDef hfdcan2;
