@@ -3,6 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Helper functions
+static void ws_generate_key(char *key);
+static void ws_base64_encode(const uint8_t *input, uint16_t input_len, char *output);
+static int8_t ws_parse_handshake_response(websocket_client_t *client, const char *response);
+static uint16_t ws_create_frame(uint8_t *buffer, ws_opcode_t opcode, const uint8_t *payload, uint16_t payload_len, bool mask);
+static int8_t ws_parse_frame(const uint8_t *buffer, uint16_t buffer_len, ws_frame_t *frame);
+static void ws_mask_payload(uint8_t *payload, uint16_t len, const uint8_t *mask);
+
+
 // Base64 encoding table
 static const char base64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -27,22 +36,15 @@ int8_t ws_client_init(websocket_client_t *client, uint8_t socket_num) {
 }
 
 // Connect to WebSocket server
-int8_t ws_client_connect(websocket_client_t *client, const char *host, uint16_t port, const char *path) {
-    if (!client || !host || !path) {
+int8_t ws_client_connect(websocket_client_t *client, uint8_t *host, uint16_t port, const char *path) {
+    if (!client || !host|| !path) {
         return -1;
     }
 
     // Store connection parameters
-    strncpy(client->host, host, sizeof(client->host) - 1);
+    memcpy(client->host, host, 4);
     client->port = port;
     strncpy(client->path, path, sizeof(client->path) - 1);
-
-    // Resolve hostname to IP (simplified - assuming IP address is provided)
-    uint8_t server_ip[4];
-    if (sscanf(host, "%u.%u.%u.%u", &server_ip[0], &server_ip[1], &server_ip[2], &server_ip[3]) != 4) {
-        client->state = WS_STATE_ERROR;
-        return -1;
-    }
 
     // Create TCP socket
     int8_t result = socket(client->socket_num, Sn_MR_TCP, 0, 0);
@@ -54,7 +56,7 @@ int8_t ws_client_connect(websocket_client_t *client, const char *host, uint16_t 
 
     // Connect to server
     client->state = WS_STATE_CONNECTING;
-    result = connect(client->socket_num, server_ip, port);
+    result = connect(client->socket_num, host, port);
     if (result != SOCK_OK) {
         client->state = WS_STATE_ERROR;
         close(client->socket_num);
@@ -69,14 +71,14 @@ int8_t ws_client_connect(websocket_client_t *client, const char *host, uint16_t 
     char handshake[512];
     snprintf(handshake, sizeof(handshake),
         "GET %s HTTP/1.1\r\n"
-        "Host: %s:%d\r\n"
+        "Host: %d.%d.%d.%d:%d\r\n"
         "Upgrade: websocket\r\n"
         "Connection: Upgrade\r\n"
         "Sec-WebSocket-Key: %s\r\n"
         "Sec-WebSocket-Version: 13\r\n"
         "\r\n",
-        path, host, port, client->sec_websocket_key);
-
+        path, host[0], host[1], host[2], host[3], port, client->sec_websocket_key);
+    
     int32_t sent = send(client->socket_num, (uint8_t*)handshake, strlen(handshake));
     if (sent <= 0) {
         client->state = WS_STATE_ERROR;

@@ -46,7 +46,7 @@ typedef enum {
 typedef struct {
     uint8_t socket_num;
     ws_state_t state;
-    char host[64];
+    uint8_t host[4];
     uint16_t port;
     char path[128];
     char sec_websocket_key[25];
@@ -56,7 +56,7 @@ typedef struct {
 
 // Function prototypes
 int8_t ws_client_init(websocket_client_t *client, uint8_t socket_num);
-int8_t ws_client_connect(websocket_client_t *client, const char *host, uint16_t port, const char *path);
+int8_t ws_client_connect(websocket_client_t *client, uint8_t *host, uint16_t port, const char *path);
 int8_t ws_client_send_text(websocket_client_t *client, const char *text);
 int8_t ws_client_send_binary(websocket_client_t *client, const uint8_t *data, uint16_t len);
 int8_t ws_client_receive(websocket_client_t *client, uint8_t *buffer, uint16_t *len, ws_opcode_t *opcode);

@@ -166,6 +166,15 @@ SECTIONS
     . = ALIGN(8);
   } >RAM_D1
 
+  /* SRAM4 section for BDMA buffers - REQUIRED for ADC3 on STM32H7 */
+  .sram4 (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.sram4)
+    *(.sram4*)
+    . = ALIGN(4);
+  } >RAM_D3
+
   /* Remove information from the standard libraries */
   /DISCARD/ :
   {

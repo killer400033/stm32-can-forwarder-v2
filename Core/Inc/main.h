@@ -51,14 +51,22 @@ extern "C" {
 
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
+void MX_SDMMC1_SD_Init(void);
 
 /* USER CODE BEGIN EFP */
+// Enhanced error handler with file and line info
+void Error_Handler_Debug(const char* file, int line, const char* func);
+
+// Macro to automatically capture file, line, and function info
+#define Error_Handler_Debug() Error_Handler_Debug(__FILE__, __LINE__, __func__)
 
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
 #define LED_Pin GPIO_PIN_2
 #define LED_GPIO_Port GPIOB
+#define SDMMC_CARD_DETECT_Pin GPIO_PIN_15
+#define SDMMC_CARD_DETECT_GPIO_Port GPIOA
 #define SPI1_CS_Pin GPIO_PIN_5
 #define SPI1_CS_GPIO_Port GPIOD
 

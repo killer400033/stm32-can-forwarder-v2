@@ -253,7 +253,7 @@
  * - \ref IR_PPPoE	  : PPPoE connection close
  * - \ref IR_MP		  : Magic packet
  */
-#define IR                 (_W5500_IO_BASE_ + (0x0015 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_IR           (_W5500_IO_BASE_ + (0x0015 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
@@ -271,7 +271,7 @@
  * - \ref IM_IR5 : PPPoE Close Interrupt Mask
  * - \ref IM_IR4 : Magic Packet Interrupt Mask
  */
-#define IMR                (_W5500_IO_BASE_ + (0x0016 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_IMR          (_W5500_IO_BASE_ + (0x0016 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
@@ -279,7 +279,7 @@
  * @details @ref SIR indicates the interrupt status of Socket.\n
  * Each bit of @ref SIR be still until @ref Sn_IR is cleared by the host.\n
  * If @ref Sn_IR is not equal to x00 the n-th bit of @ref SIR is and INTn PIN is asserted until @ref SIR is x00 */
-#define SIR                (_W5500_IO_BASE_ + (0x0017 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_SIR          (_W5500_IO_BASE_ + (0x0017 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
@@ -288,7 +288,7 @@
  * When a bit of @ref SIMR is and the corresponding bit of @ref SIR is  Interrupt will be issued.
  * In other words, if a bit of @ref SIMR is  an interrupt will be not issued even if the corresponding bit of @ref SIR is 
  */
-#define SIMR               (_W5500_IO_BASE_ + (0x0018 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_SIMR         (_W5500_IO_BASE_ + (0x0018 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
@@ -298,7 +298,7 @@
  * to the packet that is transmitted by \ref Sn_CR (CONNECT, DISCON, CLOSE, SEND, SEND_MAC, SEND_KEEP command).
  * If the peer does not respond within the @ref RTR time, W5500 retransmits the packet or issues timeout.
  */
-#define RTR                (_W5500_IO_BASE_ + (0x0019 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_RTR          (_W5500_IO_BASE_ + (0x0019 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
@@ -306,7 +306,7 @@
  * @details @ref RCR configures the number of time of retransmission.
  * When retransmission occurs as many as ref RCR+1 Timeout interrupt is issued (@ref Sn_IR[TIMEOUT] = .
  */
-#define RCR                (_W5500_IO_BASE_ + (0x001B << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_RCR          (_W5500_IO_BASE_ + (0x001B << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
@@ -1339,7 +1339,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa getIR()
  */
 #define setIR(ir) \
-		WIZCHIP_WRITE(IR, (ir & 0xF0))
+		WIZCHIP_WRITE(W5500_IR, (ir & 0xF0))
 
 /**
  * @ingroup Common_register_access_function
@@ -1348,7 +1348,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa setIR()
  */
 #define getIR() \
-		(WIZCHIP_READ(IR) & 0xF0)
+		(WIZCHIP_READ(W5500_IR) & 0xF0)
 /**
  * @ingroup Common_register_access_function
  * @brief Set @ref IMR register
@@ -1356,7 +1356,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa getIMR()
  */
 #define setIMR(imr) \
-		WIZCHIP_WRITE(IMR, imr)
+		WIZCHIP_WRITE(W5500_IMR, imr)
 
 /**
  * @ingroup Common_register_access_function
@@ -1365,7 +1365,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa setIMR()
  */
 #define getIMR() \
-		WIZCHIP_READ(IMR)
+		WIZCHIP_READ(W5500_IMR)
 
 
 /**
@@ -1375,7 +1375,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa getSIR()
  */
 #define setSIR(sir) \
-		WIZCHIP_WRITE(SIR, sir)
+		WIZCHIP_WRITE(W5500_SIR, sir)
 
 /**
  * @ingroup Common_register_access_function
@@ -1384,7 +1384,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa setSIR()
  */
 #define getSIR() \
-		WIZCHIP_READ(SIR)
+		WIZCHIP_READ(W5500_SIR)
 /**
  * @ingroup Common_register_access_function
  * @brief Set @ref SIMR register
@@ -1392,7 +1392,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa getSIMR()
  */
 #define setSIMR(simr) \
-		WIZCHIP_WRITE(SIMR, simr)
+		WIZCHIP_WRITE(W5500_SIMR, simr)
 
 /**
  * @ingroup Common_register_access_function
@@ -1401,7 +1401,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa setSIMR()
  */
 #define getSIMR() \
-		WIZCHIP_READ(SIMR)
+		WIZCHIP_READ(W5500_SIMR)
 
 /**
  * @ingroup Common_register_access_function
@@ -1410,8 +1410,8 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa getRTR()
  */
 #define setRTR(rtr)   {\
-		WIZCHIP_WRITE(RTR,   (uint8_t)(rtr >> 8)); \
-		WIZCHIP_WRITE(WIZCHIP_OFFSET_INC(RTR,1), (uint8_t) rtr); \
+		WIZCHIP_WRITE(W5500_RTR,   (uint8_t)(rtr >> 8)); \
+		WIZCHIP_WRITE(WIZCHIP_OFFSET_INC(W5500_RTR,1), (uint8_t) rtr); \
 	}
 
 /**
@@ -1421,7 +1421,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa setRTR()
  */
 #define getRTR() \
-		((WIZCHIP_READ(RTR) << 8) + WIZCHIP_READ(WIZCHIP_OFFSET_INC(RTR,1)))
+		((WIZCHIP_READ(W5500_RTR) << 8) + WIZCHIP_READ(WIZCHIP_OFFSET_INC(W5500_RTR,1)))
 
 /**
  * @ingroup Common_register_access_function
@@ -1430,7 +1430,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa getRCR()
  */
 #define setRCR(rcr) \
-		WIZCHIP_WRITE(RCR, rcr)
+		WIZCHIP_WRITE(W5500_RCR, rcr)
 
 /**
  * @ingroup Common_register_access_function
@@ -1439,7 +1439,7 @@ void     WIZCHIP_WRITE_BUF(uint32_t AddrSel, uint8_t* pBuf, uint16_t len);
  * @sa setRCR()
  */
 #define getRCR() \
-		WIZCHIP_READ(RCR)
+		WIZCHIP_READ(W5500_RCR)
 
 //================================================== test done ===========================================================
 
