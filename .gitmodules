@@ -1,3 +1,4 @@
 [submodule "scripts/dbcgenpy"]
 	path = scripts/dbcgenpy
 	url = git@bitbucket.org:redbackracing/dbcgenpy.git
+	branch = main

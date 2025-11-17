@@ -8,13 +8,6 @@
 #define STATUS_OK 0
 #define STATUS_ERROR -1
 
-// Struct for FRONT_IMU_VELOCITY_NORMAL
-typedef struct {
-	double NormalVelocityX;
-	double NormalVelocityY;
-	double NormalVelocityZ;
-} FRONT_IMU_VELOCITY_NORMAL_t;
-
 // Struct for PEDALS_AND_STEERING
 typedef struct {
 	double SteeringAngle;
@@ -172,7 +165,7 @@ typedef struct {
 	uint8_t AutoStatus;
 } REAR_IMU_SLIPS_t;
 
-// Struct for FRONT_IMU_STATUS_03
+// Struct for REAR_IMU_STATUS_03
 typedef struct {
 	uint8_t SolutionMode;
 	uint8_t SolAttitudeValid;
@@ -180,7 +173,7 @@ typedef struct {
 	uint8_t SolVelocityValid;
 	uint8_t SolPositionValid;
 	uint16_t HeaveStatus;
-} FRONT_IMU_STATUS_03_t;
+} REAR_IMU_STATUS_03_t;
 
 // Struct for WHEEL_SPEEDS
 typedef struct {
@@ -217,6 +210,31 @@ typedef struct {
 	double CoolantTempFanIN;
 	double CoolantTempFanOUT;
 } COOLANT_TEMPS_t;
+
+// Struct for STEERING_WHEEL_BUTTONS
+typedef struct {
+	uint8_t Button7;
+	uint8_t Button6;
+	uint8_t Button5;
+	uint8_t Button4;
+	uint8_t Button3;
+	uint8_t Button2;
+	uint8_t Button1;
+	uint8_t Button7Hold;
+	uint8_t Button6Hold;
+	uint8_t Button5Hold;
+	uint8_t Button4Hold;
+	uint8_t Button3Hold;
+	uint8_t Button2Hold;
+	uint8_t Button1Hold;
+	double Button7_hold_time;
+	double Button6_hold_time;
+	double Button5_hold_time;
+	double Button4_hold_time;
+	double Button3_hold_time;
+	double Button2_hold_time;
+	double Button1_hold_time;
+} STEERING_WHEEL_BUTTONS_t;
 
 // Struct for DRIVER_DISPLAY_SELECT
 typedef struct {
@@ -317,94 +335,21 @@ typedef struct {
 
 // Struct for ODOMETER_UPDATE
 typedef struct {
-	uint32_t Odometer;
+	uint32_t Odometer_Update_Val;
 } ODOMETER_UPDATE_t;
 
-// Struct for ODOMETER_SAVE
+// Struct for ODOMETER_READING
 typedef struct {
-	uint32_t OdometerS;
-} ODOMETER_SAVE_t;
+	uint32_t Odometer;
+} ODOMETER_READING_t;
 
 // Struct for TIMESTAMP_READING
 typedef struct {
 	uint32_t Time_UNIX;
 } TIMESTAMP_READING_t;
 
-// Struct for RTD_MODES_FLASH
-typedef struct {
-	uint8_t RTDMode;
-	uint8_t TorqueLimit;
-	uint8_t PowerLimit;
-	uint8_t RegenLimit;
-	uint8_t RegenMode;
-	uint8_t TorqueVectoringMode;
-	uint8_t SpeedSetPoint;
-	uint8_t LaunchDisable;
-} RTD_MODES_FLASH_t;
-
-// Struct for RTD_MODES_SAVE
-typedef struct {
-	uint8_t RTDModeS;
-	uint8_t TorqueLimitS;
-	uint8_t PowerLimitS;
-	uint8_t RegenLimitS;
-	uint8_t RegenModeS;
-	uint8_t TorqueVectoringModeS;
-	uint8_t SpeedSetPointS;
-	uint8_t LaunchDisableS;
-} RTD_MODES_SAVE_t;
-
-// Struct for RTD_MODES_UPDATE
-typedef struct {
-	uint8_t RTDModeU;
-	uint8_t TorqueLimitU;
-	uint8_t PowerLimitU;
-	uint8_t RegenLimitU;
-	uint8_t RegenModeU;
-	uint8_t TorqueVectoringModeU;
-	uint8_t SpeedSetPointU;
-	uint8_t LaunchDisableU;
-} RTD_MODES_UPDATE_t;
-
-// Struct for CANHUB_TEMP_SENSORS
-typedef struct {
-	double OilTempSensorLeft;
-	double OilTempSensorRight;
-	double CoolingTempSensorLeft;
-	double CoolingTempSensorRight;
-} CANHUB_TEMP_SENSORS_t;
-
-// Struct for CANHUB_POTS
-typedef struct {
-	double CanhubPot1;
-	double CanhubPot2;
-} CANHUB_POTS_t;
-
-// Struct for CANHUB_THERMOCOUPLES
-typedef struct {
-	double ThermoFL;
-	double ThermoFR;
-	double ThermoRL;
-	double ThermoRR;
-} CANHUB_THERMOCOUPLES_t;
-
-// Struct for CANHUB_STRAIN_LINKS
-typedef struct {
-	int16_t LinkStrain1;
-	int16_t LinkStrain2;
-	int16_t LinkStrain3;
-	int16_t LinkStrain4;
-} CANHUB_STRAIN_LINKS_t;
-
-// Struct for CANHUB_STRAIN_STEERING
-typedef struct {
-	int16_t SteeringStrain1;
-	int16_t SteeringStrain2;
-} CANHUB_STRAIN_STEERING_t;
-
 
 // Unpack function prototypes
-int8_t Unpack_FRONT_IMU_VELOCITY_NORMAL(FRONT_IMU_VELOCITY_NORMAL_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_PEDALS_AND_STEERING(PEDALS_AND_STEERING_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_FRONT_IMU_GYROS(FRONT_IMU_GYROS_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_FRONT_IMU_GPS_POS(FRONT_IMU_GPS_POS_t* _m, const uint8_t* _d, uint8_t len);
@@ -428,12 +373,13 @@ int8_t Unpack_REAR_IMU_EKF_NED_VEL_ACC(REAR_IMU_EKF_NED_VEL_ACC_t* _m, const uin
 int8_t Unpack_REAR_IMU_GPU_VEL_INFO(REAR_IMU_GPU_VEL_INFO_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_REAR_IMU_GPS_POS_INFO(REAR_IMU_GPS_POS_INFO_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_REAR_IMU_SLIPS(REAR_IMU_SLIPS_t* _m, const uint8_t* _d, uint8_t len);
-int8_t Unpack_FRONT_IMU_STATUS_03(FRONT_IMU_STATUS_03_t* _m, const uint8_t* _d, uint8_t len);
+int8_t Unpack_REAR_IMU_STATUS_03(REAR_IMU_STATUS_03_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_WHEEL_SPEEDS(WHEEL_SPEEDS_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_REAR_DAMPERS_REAR_BRAKES(REAR_DAMPERS_REAR_BRAKES_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_BRAKE_PRESSURES(BRAKE_PRESSURES_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_COOLANT_PRESSURES(COOLANT_PRESSURES_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_COOLANT_TEMPS(COOLANT_TEMPS_t* _m, const uint8_t* _d, uint8_t len);
+int8_t Unpack_STEERING_WHEEL_BUTTONS(STEERING_WHEEL_BUTTONS_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_DRIVER_DISPLAY_SELECT(DRIVER_DISPLAY_SELECT_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_ECU_TractiveState(ECU_TractiveState_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_ECU_STATUS_AND_LAPS(ECU_STATUS_AND_LAPS_t* _m, const uint8_t* _d, uint8_t len);
@@ -445,19 +391,10 @@ int8_t Unpack_AV_DEBUG_DISPLAY_3(AV_DEBUG_DISPLAY_3_t* _m, const uint8_t* _d, ui
 int8_t Unpack_AV_DEBUG_DISPLAY_4(AV_DEBUG_DISPLAY_4_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_AV_DEBUG_DISPLAY_5(AV_DEBUG_DISPLAY_5_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_ODOMETER_UPDATE(ODOMETER_UPDATE_t* _m, const uint8_t* _d, uint8_t len);
-int8_t Unpack_ODOMETER_SAVE(ODOMETER_SAVE_t* _m, const uint8_t* _d, uint8_t len);
+int8_t Unpack_ODOMETER_READING(ODOMETER_READING_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_TIMESTAMP_READING(TIMESTAMP_READING_t* _m, const uint8_t* _d, uint8_t len);
-int8_t Unpack_RTD_MODES_FLASH(RTD_MODES_FLASH_t* _m, const uint8_t* _d, uint8_t len);
-int8_t Unpack_RTD_MODES_SAVE(RTD_MODES_SAVE_t* _m, const uint8_t* _d, uint8_t len);
-int8_t Unpack_RTD_MODES_UPDATE(RTD_MODES_UPDATE_t* _m, const uint8_t* _d, uint8_t len);
-int8_t Unpack_CANHUB_TEMP_SENSORS(CANHUB_TEMP_SENSORS_t* _m, const uint8_t* _d, uint8_t len);
-int8_t Unpack_CANHUB_POTS(CANHUB_POTS_t* _m, const uint8_t* _d, uint8_t len);
-int8_t Unpack_CANHUB_THERMOCOUPLES(CANHUB_THERMOCOUPLES_t* _m, const uint8_t* _d, uint8_t len);
-int8_t Unpack_CANHUB_STRAIN_LINKS(CANHUB_STRAIN_LINKS_t* _m, const uint8_t* _d, uint8_t len);
-int8_t Unpack_CANHUB_STRAIN_STEERING(CANHUB_STRAIN_STEERING_t* _m, const uint8_t* _d, uint8_t len);
 
 // Pack function prototypes
-int8_t Pack_FRONT_IMU_VELOCITY_NORMAL(const FRONT_IMU_VELOCITY_NORMAL_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_PEDALS_AND_STEERING(const PEDALS_AND_STEERING_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_FRONT_IMU_GYROS(const FRONT_IMU_GYROS_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_FRONT_IMU_GPS_POS(const FRONT_IMU_GPS_POS_t* _m, uint8_t* _d, uint8_t len);
@@ -481,12 +418,13 @@ int8_t Pack_REAR_IMU_EKF_NED_VEL_ACC(const REAR_IMU_EKF_NED_VEL_ACC_t* _m, uint8
 int8_t Pack_REAR_IMU_GPU_VEL_INFO(const REAR_IMU_GPU_VEL_INFO_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_REAR_IMU_GPS_POS_INFO(const REAR_IMU_GPS_POS_INFO_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_REAR_IMU_SLIPS(const REAR_IMU_SLIPS_t* _m, uint8_t* _d, uint8_t len);
-int8_t Pack_FRONT_IMU_STATUS_03(const FRONT_IMU_STATUS_03_t* _m, uint8_t* _d, uint8_t len);
+int8_t Pack_REAR_IMU_STATUS_03(const REAR_IMU_STATUS_03_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_WHEEL_SPEEDS(const WHEEL_SPEEDS_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_REAR_DAMPERS_REAR_BRAKES(const REAR_DAMPERS_REAR_BRAKES_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_BRAKE_PRESSURES(const BRAKE_PRESSURES_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_COOLANT_PRESSURES(const COOLANT_PRESSURES_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_COOLANT_TEMPS(const COOLANT_TEMPS_t* _m, uint8_t* _d, uint8_t len);
+int8_t Pack_STEERING_WHEEL_BUTTONS(const STEERING_WHEEL_BUTTONS_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_DRIVER_DISPLAY_SELECT(const DRIVER_DISPLAY_SELECT_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_ECU_TractiveState(const ECU_TractiveState_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_ECU_STATUS_AND_LAPS(const ECU_STATUS_AND_LAPS_t* _m, uint8_t* _d, uint8_t len);
@@ -498,24 +436,10 @@ int8_t Pack_AV_DEBUG_DISPLAY_3(const AV_DEBUG_DISPLAY_3_t* _m, uint8_t* _d, uint
 int8_t Pack_AV_DEBUG_DISPLAY_4(const AV_DEBUG_DISPLAY_4_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_AV_DEBUG_DISPLAY_5(const AV_DEBUG_DISPLAY_5_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_ODOMETER_UPDATE(const ODOMETER_UPDATE_t* _m, uint8_t* _d, uint8_t len);
-int8_t Pack_ODOMETER_SAVE(const ODOMETER_SAVE_t* _m, uint8_t* _d, uint8_t len);
+int8_t Pack_ODOMETER_READING(const ODOMETER_READING_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_TIMESTAMP_READING(const TIMESTAMP_READING_t* _m, uint8_t* _d, uint8_t len);
-int8_t Pack_RTD_MODES_FLASH(const RTD_MODES_FLASH_t* _m, uint8_t* _d, uint8_t len);
-int8_t Pack_RTD_MODES_SAVE(const RTD_MODES_SAVE_t* _m, uint8_t* _d, uint8_t len);
-int8_t Pack_RTD_MODES_UPDATE(const RTD_MODES_UPDATE_t* _m, uint8_t* _d, uint8_t len);
-int8_t Pack_CANHUB_TEMP_SENSORS(const CANHUB_TEMP_SENSORS_t* _m, uint8_t* _d, uint8_t len);
-int8_t Pack_CANHUB_POTS(const CANHUB_POTS_t* _m, uint8_t* _d, uint8_t len);
-int8_t Pack_CANHUB_THERMOCOUPLES(const CANHUB_THERMOCOUPLES_t* _m, uint8_t* _d, uint8_t len);
-int8_t Pack_CANHUB_STRAIN_LINKS(const CANHUB_STRAIN_LINKS_t* _m, uint8_t* _d, uint8_t len);
-int8_t Pack_CANHUB_STRAIN_STEERING(const CANHUB_STRAIN_STEERING_t* _m, uint8_t* _d, uint8_t len);
 
 // Macros to apply scaling and offset
-#define UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYX(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYY(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYZ(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYX(x) ( (((x) - (0.000000)) / (0.010000)) )
-#define PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYY(x) ( (((x) - (0.000000)) / (0.010000)) )
-#define PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYZ(x) ( (((x) - (0.000000)) / (0.010000)) )
 #define UNPACK_SCALE_OFFSET_PEDALS_AND_STEERING_STEERINGANGLE(x) ( (((x) * (0.100000)) + (0.000000)) )
 #define PACK_SCALE_OFFSET_PEDALS_AND_STEERING_STEERINGANGLE(x) ( (((x) - (0.000000)) / (0.100000)) )
 #define UNPACK_SCALE_OFFSET_FRONT_IMU_GYROS_GYROX(x) ( (((x) * (0.001000)) + (0.000000)) )
@@ -654,6 +578,20 @@ int8_t Pack_CANHUB_STRAIN_STEERING(const CANHUB_STRAIN_STEERING_t* _m, uint8_t* 
 #define PACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPINVERTER(x) ( (((x) - (0.000000)) / (0.100000)) )
 #define PACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPFANIN(x) ( (((x) - (0.000000)) / (0.100000)) )
 #define PACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPFANOUT(x) ( (((x) - (0.000000)) / (0.100000)) )
+#define UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON7_HOLD_TIME(x) ( (((x) * (0.500000)) + (0.000000)) )
+#define UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON6_HOLD_TIME(x) ( (((x) * (0.500000)) + (0.000000)) )
+#define UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON5_HOLD_TIME(x) ( (((x) * (0.500000)) + (0.000000)) )
+#define UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON4_HOLD_TIME(x) ( (((x) * (0.500000)) + (0.000000)) )
+#define UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON3_HOLD_TIME(x) ( (((x) * (0.500000)) + (0.000000)) )
+#define UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON2_HOLD_TIME(x) ( (((x) * (0.500000)) + (0.000000)) )
+#define UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON1_HOLD_TIME(x) ( (((x) * (0.500000)) + (0.000000)) )
+#define PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON7_HOLD_TIME(x) ( (((x) - (0.000000)) / (0.500000)) )
+#define PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON6_HOLD_TIME(x) ( (((x) - (0.000000)) / (0.500000)) )
+#define PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON5_HOLD_TIME(x) ( (((x) - (0.000000)) / (0.500000)) )
+#define PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON4_HOLD_TIME(x) ( (((x) - (0.000000)) / (0.500000)) )
+#define PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON3_HOLD_TIME(x) ( (((x) - (0.000000)) / (0.500000)) )
+#define PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON2_HOLD_TIME(x) ( (((x) - (0.000000)) / (0.500000)) )
+#define PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON1_HOLD_TIME(x) ( (((x) - (0.000000)) / (0.500000)) )
 #define UNPACK_SCALE_OFFSET_ECU_STATUS_AND_LAPS_IMD(x) ( (((x) * (0.100000)) + (0.000000)) )
 #define UNPACK_SCALE_OFFSET_ECU_STATUS_AND_LAPS_BATTERYVOLTAGE(x) ( (((x) * (0.100000)) + (0.000000)) )
 #define PACK_SCALE_OFFSET_ECU_STATUS_AND_LAPS_IMD(x) ( (((x) - (0.000000)) / (0.100000)) )
@@ -684,26 +622,6 @@ int8_t Pack_CANHUB_STRAIN_STEERING(const CANHUB_STRAIN_STEERING_t* _m, uint8_t* 
 #define PACK_SCALE_OFFSET_AV_DEBUG_DISPLAY_5_TORQUEACTUAL(x) ( (((x) - (0.000000)) / (0.010000)) )
 #define PACK_SCALE_OFFSET_AV_DEBUG_DISPLAY_5_ACCELACTUAL(x) ( (((x) - (0.000000)) / (0.010000)) )
 #define PACK_SCALE_OFFSET_AV_DEBUG_DISPLAY_5_ACCELREQROS(x) ( (((x) - (0.000000)) / (0.010000)) )
-#define UNPACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_OILTEMPSENSORLEFT(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define UNPACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_OILTEMPSENSORRIGHT(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define UNPACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_COOLINGTEMPSENSORLEFT(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define UNPACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_COOLINGTEMPSENSORRIGHT(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_OILTEMPSENSORLEFT(x) ( (((x) - (0.000000)) / (0.010000)) )
-#define PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_OILTEMPSENSORRIGHT(x) ( (((x) - (0.000000)) / (0.010000)) )
-#define PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_COOLINGTEMPSENSORLEFT(x) ( (((x) - (0.000000)) / (0.010000)) )
-#define PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_COOLINGTEMPSENSORRIGHT(x) ( (((x) - (0.000000)) / (0.010000)) )
-#define UNPACK_SCALE_OFFSET_CANHUB_POTS_CANHUBPOT1(x) ( (((x) * (0.001000)) + (0.000000)) )
-#define UNPACK_SCALE_OFFSET_CANHUB_POTS_CANHUBPOT2(x) ( (((x) * (0.001000)) + (0.000000)) )
-#define PACK_SCALE_OFFSET_CANHUB_POTS_CANHUBPOT1(x) ( (((x) - (0.000000)) / (0.001000)) )
-#define PACK_SCALE_OFFSET_CANHUB_POTS_CANHUBPOT2(x) ( (((x) - (0.000000)) / (0.001000)) )
-#define UNPACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMOFL(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define UNPACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMOFR(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define UNPACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMORL(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define UNPACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMORR(x) ( (((x) * (0.010000)) + (0.000000)) )
-#define PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMOFL(x) ( (((x) - (0.000000)) / (0.010000)) )
-#define PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMOFR(x) ( (((x) - (0.000000)) / (0.010000)) )
-#define PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMORL(x) ( (((x) - (0.000000)) / (0.010000)) )
-#define PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMORR(x) ( (((x) - (0.000000)) / (0.010000)) )
 
 
 #endif
