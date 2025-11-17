@@ -45,7 +45,7 @@ void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 			canFrame.can_bus = canBusId;
 
 			// Calculate absolute timestamp in microseconds
-			canFrame.timestamp = unixMicroseconds[canBusId] + (uint64_t)rxHeader.RxTimestamp;
+			canFrame.timestamp = (uint64_t)(unixMicroseconds[canBusId] + (uint64_t)rxHeader.RxTimestamp) * 1000U;
 
 			// Copy data
 			uint32_t dataLength = rxHeader.DataLength; // Extract DLC

@@ -16,7 +16,7 @@ volatile uint32_t seconds;
 
 // NTP client variables
 static bool ntp_initialized = false;
-static bool ntp_sync_successful = false;
+bool ntp_sync_successful = false;
 static bool ntp_dns_request_pending = false;
 
 // DNS queue handle

@@ -14,6 +14,10 @@ extern FDCAN_HandleTypeDef hfdcan3;
 extern "C" {
 #endif
 
+#define CONTROL_BUS 0
+#define SENSOR_BUS 1
+#define TRACTIVE_BUS 2
+
 void initCAN();
 void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan);
 int8_t sendCanFrame(uint16_t canId, uint8_t canBus, uint8_t *canData, uint8_t frameLen);
@@ -28,11 +32,11 @@ static const uint32_t canBaudRates[3] = {
 // Inline function for getting CAN bus ID
 static inline int8_t getCANBusID(FDCAN_HandleTypeDef *hfdcan) {
     if (hfdcan->Instance == FDCAN1) {
-        return 0;
+        return CONTROL_BUS;
     } else if (hfdcan->Instance == FDCAN2) {
-        return 1;
+        return SENSOR_BUS;
     } else if (hfdcan->Instance == FDCAN3) {
-        return 2;
+        return TRACTIVE_BUS;
     } else {
         return -1; // Unknown FDCAN instance
     }
@@ -41,11 +45,11 @@ static inline int8_t getCANBusID(FDCAN_HandleTypeDef *hfdcan) {
 // Inline function for getting CAN peripheral from bus ID
 static inline FDCAN_HandleTypeDef* getCANPeripheralFromBusID(uint32_t canBus) {
     switch (canBus) {
-        case 0:
+        case CONTROL_BUS:
             return &hfdcan1;
-        case 1:
+        case SENSOR_BUS:
             return &hfdcan2;
-        case 2:
+        case TRACTIVE_BUS:
             return &hfdcan3;
         default:
             return NULL; // Invalid CAN bus ID

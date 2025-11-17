@@ -7,6 +7,7 @@ extern "C" {
 
 #include <stdint.h>
 #include "cmsis_os.h"
+#include <stdbool.h>
 #include "main.h"
 
 #define NTP_RETRY_CNT 5
@@ -20,6 +21,7 @@ extern "C" {
 void initTime(TIM_HandleTypeDef *htim);
 
 extern TIM_HandleTypeDef *UNIXTimerInstance;
+extern bool ntp_sync_successful;
 
 uint32_t getUnixTimeSeconds();
 uint64_t getUnixTimeMicroseconds();

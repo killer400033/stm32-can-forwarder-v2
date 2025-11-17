@@ -13,10 +13,10 @@ extern SPI_HandleTypeDef hspi1;
 
 wiz_NetInfo net_info = {
 	.mac = { 0x00, 0x08, 0xDC, 0xAB, 0xCD, 0xEF },
-  //.gw = {10, 0, 0, 1},
-	//.ip = {10, 0, 0, 69},
-	.gw = {192, 168, 137, 1},
-	.ip = {192, 168, 137, 100},
+  .gw = {10, 0, 0, 1},
+	.ip = {10, 0, 0, 69},
+	//.gw = {192, 168, 137, 1},
+	//.ip = {192, 168, 137, 100},
 	.sn = {255, 255, 255, 0},
 	.dns = {8, 8, 8, 8},
 	.dhcp = NETINFO_STATIC,

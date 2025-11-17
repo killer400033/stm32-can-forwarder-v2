@@ -9,6 +9,7 @@
 #include "dns_client.h"
 #include "dns_resolve.h"
 #include "log_handler.h"
+#include "unix_time.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -81,7 +82,7 @@ void appLayerThread(void *argument) {
 
 		// Check if DNS TTL has expired and no request is pending
 		uint32_t current_time = osKernelGetTickCount();
-		if ((!has_valid_ip || current_time >= dns_ttl_expiry) && !dns_request_pending) {
+		if ((!has_valid_ip) && !dns_request_pending) {
 			// Check if queue has space
 			if (osMessageQueueGetSpace(dnsReqQueueHandle) > 0) {
 				dns_request_t dns_req = {
@@ -102,12 +103,14 @@ void appLayerThread(void *argument) {
 		}
 
 		// Wait for valid IP before attempting connection
-		if (!has_valid_ip) {
+		if (!has_valid_ip || !ntp_sync_successful) {
 			osDelay(1000);
 			continue;
 		}
 
+		// TODO: Remove FAT delay when networking fixed
 		if (ws_client.state == WS_STATE_DISCONNECTED) {
+			osDelay(20000);
 			if (ws_client_connect(&ws_client, ws_server_ip, 80, "/api/decoder/connection") != 0) {
 				log_msg(LL_WRN, "WebSocket client connection failed...");
 			}

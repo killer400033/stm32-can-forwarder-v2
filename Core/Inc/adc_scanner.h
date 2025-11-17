@@ -10,7 +10,7 @@ extern "C" {
 
 /* Defines -------------------------------------------------------------------*/
 #define ADC_TIM_CLK 550000000  // Timer clock frequency in Hz
-#define ADC_SAMPLE_RATE 1  // ADC sampling rate (Hz)
+#define ADC_SAMPLE_RATE 10  // ADC sampling rate (Hz)
 
 /* Exported types ------------------------------------------------------------*/
 typedef struct {

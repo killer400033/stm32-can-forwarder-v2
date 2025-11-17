@@ -95,7 +95,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
   if (adc1_complete && adc2_complete && adc3_complete) {
     // All ADCs completed - now read the data from DMA buffers
   	ADC_ScanData_t data;
-    data.timestamp = getUnixTimeMicroseconds();
+    data.timestamp = getUnixTimeNanoseconds();
 
     // ADC1 DMA buffer[0] - Channel 16 - Strain gauge 0
     data.strain_voltages[0] = ((float)adc1_dma_buffer[0] * 3.3f) / 4095.0f;
@@ -163,7 +163,7 @@ void adcPacketThread(void *argument)
       
       // Reusable CAN frame for all messages
       CanFrame frame = {0};
-      frame.can_bus = 0;
+      frame.can_bus = SENSOR_BUS;
       frame.timestamp = adcData.timestamp;
 
       // Create CAN frame for coolant and oil temperature sensors (CAN ID 910)
