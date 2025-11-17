@@ -27,7 +27,7 @@ extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
 extern ADC_HandleTypeDef hadc3;
 extern osMessageQueueId_t adcQueueHandle;
-extern osMessageQueueId_t wsCanQueueHandle;
+extern osMessageQueueId_t canSrcQueueHandle;
 
 // ADC Packet Task
 osThreadId_t adcPacketTaskHandle;
@@ -167,46 +167,46 @@ void adcPacketThread(void *argument)
       frame.timestamp = adcData.timestamp;
 
       // Create CAN frame for coolant and oil temperature sensors (CAN ID 910)
-      TEMPERATURES_t tempMsg = {0};
-      tempMsg.OilTemp0 = adcData.gearbox_temp[0];
-      tempMsg.OilTemp1 = adcData.gearbox_temp[1];
-      tempMsg.CoolantTemp0 = adcData.coolant_temp[0];
-      tempMsg.CoolantTemp1 = adcData.coolant_temp[1];
+      CANHUB_TEMP_SENSORS_t tempMsg = {0};
+      tempMsg.OilTempSensorLeft = adcData.gearbox_temp[0];
+      tempMsg.OilTempSensorRight = adcData.gearbox_temp[1];
+      tempMsg.CoolingTempSensorLeft = adcData.coolant_temp[0];
+      tempMsg.CoolingTempSensorRight = adcData.coolant_temp[1];
       
-      if (Pack_TEMPERATURES(&tempMsg, frame.can_data, 8) == STATUS_OK) {
+      if (Pack_CANHUB_TEMP_SENSORS(&tempMsg, frame.can_data, 8) == STATUS_OK) {
         frame.can_id = 910;
         pushToWSandCAN(&frame, 8);
       }
 
       // Create CAN frame for potentiometers (CAN ID 911)
-      POTENTIOMETERS_t potMsg = {0};
-      potMsg.Potentiometer0 = adcData.pot_voltages[0];
-      potMsg.Potentiometer1 = adcData.pot_voltages[1];
+      CANHUB_POTS_t potMsg = {0};
+      potMsg.CanhubPot1 = adcData.pot_voltages[0];
+      potMsg.CanhubPot2 = adcData.pot_voltages[1];
       
-      if (Pack_POTENTIOMETERS(&potMsg, frame.can_data, 8) == STATUS_OK) {
+      if (Pack_CANHUB_POTS(&potMsg, frame.can_data, 8) == STATUS_OK) {
         frame.can_id = 911;
         pushToWSandCAN(&frame, 4);
       }
 
       // Create CAN frame for strain gauge linkages (CAN ID 913)
-      STRAIN_GAUGE_LINKAGES_t strainLinkMsg = {0};
-      strainLinkMsg.StrainLinkage0 = (int16_t)adcData.strain_voltages[0];
-      strainLinkMsg.StrainLinkage1 = (int16_t)adcData.strain_voltages[1];
-      strainLinkMsg.StrainLinkage2 = (int16_t)adcData.strain_voltages[2];
-      strainLinkMsg.StrainLinkage3 = (int16_t)adcData.strain_voltages[3];
+      CANHUB_STRAIN_LINKS_t strainLinkMsg = {0};
+      strainLinkMsg.LinkStrain1 = (int16_t)adcData.strain_voltages[0];
+      strainLinkMsg.LinkStrain2 = (int16_t)adcData.strain_voltages[1];
+      strainLinkMsg.LinkStrain3 = (int16_t)adcData.strain_voltages[2];
+      strainLinkMsg.LinkStrain4 = (int16_t)adcData.strain_voltages[3];
       
-      if (Pack_STRAIN_GAUGE_LINKAGES(&strainLinkMsg, frame.can_data, 8) == STATUS_OK) {
+      if (Pack_CANHUB_STRAIN_LINKS(&strainLinkMsg, frame.can_data, 8) == STATUS_OK) {
         frame.can_id = 913;
         pushToWSandCAN(&frame, 8);
       }
 
       // Create CAN frame for strain gauge steering column (CAN ID 915)
-      STRAIN_GAUGE_STEERING_t strainSteerMsg = {0};
-      strainSteerMsg.StrainSteering0 = (int16_t)adcData.strain_voltages[4];
-      strainSteerMsg.StrainSteering1 = (int16_t)adcData.strain_voltages[5];
+      CANHUB_STRAIN_STEERING_t strainSteerMsg = {0};
+      strainSteerMsg.SteeringStrain1 = (int16_t)adcData.strain_voltages[4];
+      strainSteerMsg.SteeringStrain2 = (int16_t)adcData.strain_voltages[5];
       
-      if (Pack_STRAIN_GAUGE_STEERING(&strainSteerMsg, frame.can_data, 8) == STATUS_OK) {
-        frame.can_id = 915;
+      if (Pack_CANHUB_STRAIN_STEERING(&strainSteerMsg, frame.can_data, 8) == STATUS_OK) {
+        frame.can_id = 914;
         pushToWSandCAN(&frame, 4);
       }
     }
@@ -215,15 +215,15 @@ void adcPacketThread(void *argument)
 
 static void pushToWSandCAN(CanFrame *frame, uint8_t length)
 {
-  if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
-    osMessageQueuePut(wsCanQueueHandle, frame, 0, 0);
+  if (osMessageQueueGetSpace(canSrcQueueHandle) > 0) {
+    osMessageQueuePut(canSrcQueueHandle, frame, 0, 0);
   }
   else {
     // TODO: Implement error handling for dropped messages
     dropped_packets++;
   }
   if (sendCanFrame(frame->can_id, frame->can_bus, frame->can_data, length) != 0) {
-    log_msg(LL_ERR, "Failed to send CAN ID %d through bus %d", frame->can_id, frame->can_bus);
+   log_msg(LL_ERR, "Failed to send CAN ID %d through bus %d", frame->can_id, frame->can_bus);
   }
 }
 

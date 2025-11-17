@@ -25,7 +25,7 @@ extern osMessageQueueId_t dnsReqQueueHandle;
 osThreadId_t ntpSyncTaskHandle;
 const osThreadAttr_t ntpSyncTask_attributes = {
   .name = "NTP Sync",
-  .stack_size = 128 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 
@@ -86,7 +86,7 @@ void ntpSyncThread(void *argument) {
 			osThreadExit();
 		}
 
-		osDelay(NTP_RETRY_INTERVAL_MS);
+		osDelay(10000);
 	}
 }
 
@@ -219,9 +219,8 @@ static void updateInternalTime(uint32_t ntp_time) {
 		setUnixTimeSeconds(getUnixFromRTC(sTime, sDate));
 
 		log_msg(LL_DBG, "Successfully got NTP time!");
+		log_msg(LL_DBG, "Current Unix Time: %ld", getUnixTimeSeconds());
 	}
-	
-	log_msg(LL_DBG, "Current Unix Time: %ld", getUnixTimeSeconds());
 }
 
 

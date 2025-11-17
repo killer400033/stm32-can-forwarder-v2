@@ -13,13 +13,13 @@
 extern FDCAN_HandleTypeDef hfdcan1;
 extern FDCAN_HandleTypeDef hfdcan2;
 extern FDCAN_HandleTypeDef hfdcan3;
-extern osMessageQueueId_t canRecQueueHandle;
+extern osMessageQueueId_t canSrcQueueHandle;
 
 // Clock for 3 CAN peripherals
 volatile uint64_t unixMicroseconds[3];
 
 /**
- * @brief Drain all messages from FDCAN FIFO and put them in canRecQueueHandle
+ * @brief Drain all messages from FDCAN FIFO and put them in canSrcQueueHandle
  * @param hfdcan: FDCAN handle (hfdcan1, hfdcan2, or hfdcan3)
  * @retval None
  */
@@ -55,7 +55,7 @@ void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 			memcpy(canFrame.can_data, rxData, dataLength);
 
 			// Try to put message in queue
-			if (osMessageQueuePut(canRecQueueHandle, &canFrame, 0, 0) != osOK) {
+			if (osMessageQueuePut(canSrcQueueHandle, &canFrame, 0, 0) != osOK) {
 				// TODO: Implement proper error handling for dropped messages
 				dropped_packets++;
 			}

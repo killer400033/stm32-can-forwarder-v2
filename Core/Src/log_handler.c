@@ -12,7 +12,7 @@ const osThreadAttr_t logTask_attributes = {
 };
 
 // Log buffer
-static char log_buffer[LOG_BUFFER_SIZE];
+char log_buffer[LOG_BUFFER_SIZE];
 static volatile uint32_t log_write_pos = 0;
 
 // UART handle for DMA transmission
@@ -20,11 +20,13 @@ static UART_HandleTypeDef* uart_handle = NULL;
 
 // Queue for pending log transmissions
 extern osMessageQueueId_t logQueueHandle;
+extern osMessageQueueId_t storageLogQueueHandle;
 
 // Mutex for thread-safe operations
 static osMutexId_t log_mutex = NULL;
 
 static void log_task(void *argument);
+static void enqueueBufferedLog(log_queue_entry_t entry, osMessageQueueId_t queueHandle);
 
 // ANSI color codes
 #if LOG_USE_COLORS
@@ -133,6 +135,14 @@ void log_msg(log_level_t level, const char* format, ...) {
                 log_write_pos += total_len;
                 log_buffer[log_write_pos++] = '\r';
                 log_buffer[log_write_pos++] = '\n';
+                total_len += 2;
+
+                log_queue_entry_t entry;
+                entry.start_ptr = msg_start;
+                entry.length = total_len;
+
+                // Queue log message to SD card storage
+                enqueueBufferedLog(entry, storageLogQueueHandle);
                 
                 // Try to send via DMA if UART is ready
                 if (uart_handle != NULL) {
@@ -140,12 +150,9 @@ void log_msg(log_level_t level, const char* format, ...) {
                     
                     if (state == HAL_UART_STATE_READY) {
                         // UART is free, send immediately
-                        HAL_UART_Transmit_DMA(uart_handle, (uint8_t*)msg_start, total_len + 2);
+                        HAL_UART_Transmit_DMA(uart_handle, (uint8_t*)msg_start, total_len);
                     } else if (logQueueHandle != NULL) {
                         // UART is busy, queue the message
-                        log_queue_entry_t entry;
-                        entry.start_index = (uint32_t)((uint8_t*)msg_start - (uint8_t*)log_buffer);
-                        entry.length = total_len + 2;
                         osMessageQueuePut(logQueueHandle, &entry, 0, 0);
                     }
                 }
@@ -155,6 +162,24 @@ void log_msg(log_level_t level, const char* format, ...) {
     
     if (log_mutex != NULL) {
         osMutexRelease(log_mutex);
+    }
+}
+
+/**
+ * @brief Enqueue a log message to a buffered queue for storage or websocket transmission
+ * @param entry The log message entry
+ * @param queueHandle The queue handle
+ */
+static void enqueueBufferedLog(log_queue_entry_t entry, osMessageQueueId_t queueHandle) {
+    if (osMessageQueueGetSpace(queueHandle) > 0 && osMessageQueueGetCount(queueHandle) < MIN_MSG_IN_BUFFER) {
+        // Queue has space and is not full, enqueue the message
+        osMessageQueuePut(queueHandle, &entry, 0, 0);
+    }
+    else {
+        // Better guarantee of not accidentally sending older log entry that has been overwritten in buffer
+        log_queue_entry_t throwaway_entry;
+        osMessageQueueGet(queueHandle, &throwaway_entry, NULL, 0);
+        osMessageQueuePut(queueHandle, &entry, 0, 0);
     }
 }
 
@@ -178,8 +203,7 @@ void log_task(void *argument)
             
             // UART is ready, send the queued message
             if (uart_handle != NULL) {
-                const char* msg_ptr = &log_buffer[entry.start_index];
-                HAL_UART_Transmit_DMA(uart_handle, (uint8_t*)msg_ptr, entry.length);
+                HAL_UART_Transmit_DMA(uart_handle, (uint8_t*)entry.start_ptr, entry.length);
             }
         }
     }

@@ -16,7 +16,6 @@ extern "C" {
 #define UNIX_TIM_CLK 550000000
 
 #define NTP_SERVER_DOMAIN "time.nist.gov"
-#define NTP_RETRY_INTERVAL_MS 10000
 
 void initTime(TIM_HandleTypeDef *htim);
 

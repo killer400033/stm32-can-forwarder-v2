@@ -93,10 +93,10 @@ osMessageQueueId_t storageCanQueueHandle;
 const osMessageQueueAttr_t storageCanQueue_attributes = {
   .name = "storageCanQueue"
 };
-/* Definitions for canRecQueue */
-osMessageQueueId_t canRecQueueHandle;
-const osMessageQueueAttr_t canRecQueue_attributes = {
-  .name = "canRecQueue"
+/* Definitions for canSrcQueue */
+osMessageQueueId_t canSrcQueueHandle;
+const osMessageQueueAttr_t canSrcQueue_attributes = {
+  .name = "canSrcQueue"
 };
 /* Definitions for adcQueue */
 osMessageQueueId_t adcQueueHandle;
@@ -112,6 +112,11 @@ const osMessageQueueAttr_t dnsReqQueue_attributes = {
 osMessageQueueId_t logQueueHandle;
 const osMessageQueueAttr_t logQueue_attributes = {
   .name = "logQueue"
+};
+/* Definitions for storageLogQueue */
+osMessageQueueId_t storageLogQueueHandle;
+const osMessageQueueAttr_t storageLogQueue_attributes = {
+  .name = "storageLogQueue"
 };
 /* USER CODE BEGIN PV */
 
@@ -221,8 +226,8 @@ int main(void)
   /* creation of storageCanQueue */
   storageCanQueueHandle = osMessageQueueNew (128, sizeof(CanFrame), &storageCanQueue_attributes);
 
-  /* creation of canRecQueue */
-  canRecQueueHandle = osMessageQueueNew (128, sizeof(CanFrame), &canRecQueue_attributes);
+  /* creation of canSrcQueue */
+  canSrcQueueHandle = osMessageQueueNew (128, sizeof(CanFrame), &canSrcQueue_attributes);
 
   /* creation of adcQueue */
   adcQueueHandle = osMessageQueueNew (2, sizeof(ADC_ScanData_t), &adcQueue_attributes);
@@ -232,6 +237,9 @@ int main(void)
 
   /* creation of logQueue */
   logQueueHandle = osMessageQueueNew (8, sizeof(log_queue_entry_t), &logQueue_attributes);
+
+  /* creation of storageLogQueue */
+  storageLogQueueHandle = osMessageQueueNew (8, sizeof(log_queue_entry_t), &storageLogQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -334,8 +342,8 @@ void PeriphCommonClock_Config(void)
 
   /** Initializes the peripherals clock
   */
-  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_ADC|RCC_PERIPHCLK_SPI1
-                              |RCC_PERIPHCLK_FDCAN;
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_ADC|RCC_PERIPHCLK_SDMMC
+                              |RCC_PERIPHCLK_SPI1|RCC_PERIPHCLK_FDCAN;
   PeriphClkInitStruct.PLL2.PLL2M = 16;
   PeriphClkInitStruct.PLL2.PLL2N = 160;
   PeriphClkInitStruct.PLL2.PLL2P = 2;
@@ -344,6 +352,7 @@ void PeriphCommonClock_Config(void)
   PeriphClkInitStruct.PLL2.PLL2RGE = RCC_PLL2VCIRANGE_0;
   PeriphClkInitStruct.PLL2.PLL2VCOSEL = RCC_PLL2VCOMEDIUM;
   PeriphClkInitStruct.PLL2.PLL2FRACN = 0;
+  PeriphClkInitStruct.SdmmcClockSelection = RCC_SDMMCCLKSOURCE_PLL2;
   PeriphClkInitStruct.Spi123ClockSelection = RCC_SPI123CLKSOURCE_PLL2;
   PeriphClkInitStruct.FdcanClockSelection = RCC_FDCANCLKSOURCE_PLL2;
   PeriphClkInitStruct.AdcClockSelection = RCC_ADCCLKSOURCE_PLL2;
@@ -870,7 +879,7 @@ void MX_SDMMC1_SD_Init(void)
   hsd1.Init.ClockPowerSave = SDMMC_CLOCK_POWER_SAVE_DISABLE;
   hsd1.Init.BusWide = SDMMC_BUS_WIDE_4B;
   hsd1.Init.HardwareFlowControl = SDMMC_HARDWARE_FLOW_CONTROL_DISABLE;
-  hsd1.Init.ClockDiv = 0;
+  hsd1.Init.ClockDiv = 80-1;
   if (HAL_SD_Init(&hsd1) != HAL_OK)
   {
     Error_Handler();
@@ -1181,13 +1190,16 @@ void StartDefaultTask(void *argument)
 	// Initialize Logging
 	log_init(&huart4);
 
+  // Begin storage thread
+  initStorage();
+
   // Initialize W5500
   W5500Init();
 
   // Initialize DNS Thread
   initDNSResolve();
 
-  // Initialize timer used for UNIX time
+  // Initialize UNIX time Thread
   initTime(&htim2);
 
   // Initialize and start FDCAN peripherals
@@ -1199,31 +1211,23 @@ void StartDefaultTask(void *argument)
   // Begin application layer thread
   initAppLayer();
 
-  // Begin storage thread
-  //initStorage();
-
   CanFrame canDataReceived;
 
   for(;;) {
 		// Process messages from canRecQueue and distribute to other queues
-		while (osMessageQueueGetCount(canRecQueueHandle) > 0) {
-			if (osMessageQueueGet(canRecQueueHandle, &canDataReceived, 0, 0) == osOK) {
-				// Forward to WebSocket queue if space available
-				if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
-					osMessageQueuePut(wsCanQueueHandle, &canDataReceived, 0, 0);
-				}
-				else {
-					dropped_packets++;
-				}
-				// Forward to storage queue if space available
-				if (osMessageQueueGetSpace(storageCanQueueHandle) > 0) {
-					osMessageQueuePut(storageCanQueueHandle, &canDataReceived, 0, 0);
-				}
+		osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever);
+		if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
+			osMessageQueuePut(wsCanQueueHandle, &canDataReceived, 0, 0);
+		}
+		else {
+			if (osMessageQueueGetSpace(storageCanQueueHandle) > 0) {
+				osMessageQueuePut(storageCanQueueHandle, &canDataReceived, 0, 0);
+			}
+			else {
+				dropped_packets++;
 			}
 		}
-	osThreadYield();
   }
-
   /* USER CODE END 5 */
 }
 

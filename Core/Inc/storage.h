@@ -6,8 +6,10 @@ extern "C" {
 #endif
 
 #include "forwarder_pb.pb.h"
+#include <stdint.h>
 
 #define MAX_CAN_FRAME_CNT 5
+#define MIN_FREE_SPACE_MB 100  // Minimum free space in MB before wiping SD card
 
 typedef struct CanFrameList {
     CanFrame canFrames[MAX_CAN_FRAME_CNT];

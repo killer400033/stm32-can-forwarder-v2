@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <stdio.h>
+#include "cmsis_os.h"
 
 // External HAL functions (assuming STM32 HAL)
 extern uint32_t HAL_GetTick(void);
@@ -431,7 +432,6 @@ int8_t dns_query(const char* hostname, uint16_t qtype, dns_response_t* response)
         
         while ((HAL_GetTick() - start_time) < g_dns_config.timeout_ms) {
             uint16_t received_size = getSn_RX_RSR(g_dns_config.socket_num);
-            uint32_t elapsed = HAL_GetTick() - start_time;
             
             if (received_size > 0) {
                 uint8_t peer_ip[4];

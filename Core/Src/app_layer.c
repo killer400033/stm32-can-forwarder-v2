@@ -22,19 +22,18 @@ const osThreadAttr_t appLayerTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
-pb_byte_t buffer[512]; // Buffer *should* be enough, might need to be increased if string in buffer is increased in length
+pb_byte_t buffer[512];
+static CanFrameList_t canFrameList = {0};
+
 volatile uint32_t dropped_packets = 0;
 
 void appLayerThread(void *argument);
-static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *canFrameList);
+static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *canFrames);
 static bool canFramesEncode(pb_ostream_t *stream, const pb_field_iter_t *field, void * const *arg);
 static void dnsResolveCallback(const uint8_t* ip_addr, uint32_t ttl, bool success);
 
 extern osMessageQueueId_t wsCanQueueHandle;
 extern osMessageQueueId_t dnsReqQueueHandle;
-
-// DNS configuration
-#define WS_DOMAIN_NAME "ws-alb-1889248813.ap-southeast-2.elb.amazonaws.com"
 
 // DNS state tracking
 static uint8_t ws_server_ip[4] = {0};
@@ -59,7 +58,6 @@ static void dnsResolveCallback(const uint8_t* ip_addr, uint32_t ttl, bool succes
 
 // Main thread that runs
 void appLayerThread(void *argument) {
-	CanFrameList_t canFrameList = {0};
 	uint32_t prev_time = osKernelGetTickCount();
 	uint32_t prev_cnt = 0;
 	uint32_t cnt = 0;
@@ -81,7 +79,6 @@ void appLayerThread(void *argument) {
 		ws_client_process(&ws_client);
 
 		// Check if DNS TTL has expired and no request is pending
-		uint32_t current_time = osKernelGetTickCount();
 		if ((!has_valid_ip) && !dns_request_pending) {
 			// Check if queue has space
 			if (osMessageQueueGetSpace(dnsReqQueueHandle) > 0) {
@@ -111,7 +108,7 @@ void appLayerThread(void *argument) {
 		// TODO: Remove FAT delay when networking fixed
 		if (ws_client.state == WS_STATE_DISCONNECTED) {
 			osDelay(20000);
-			if (ws_client_connect(&ws_client, ws_server_ip, 80, "/api/decoder/connection") != 0) {
+			if (ws_client_connect(&ws_client, ws_server_ip, 80, WS_DOMAIN_PATH) != 0) {
 				log_msg(LL_WRN, "WebSocket client connection failed...");
 			}
 		}
@@ -147,13 +144,13 @@ void appLayerThread(void *argument) {
 
 
 // Nanopb encode function to encode Packet
-static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *canFrameList) {
+static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *canFrames) {
 	// Setup pack message
 	Packet packet = Packet_init_zero;
 	// stream to write buffer
 	pb_ostream_t stream = pb_ostream_from_buffer(buffer, length);
 
-	packet.canFrames.arg = canFrameList;
+	packet.canFrames.arg = canFrames;
 	packet.canFrames.funcs.encode = canFramesEncode;
 
 	//encode the pack

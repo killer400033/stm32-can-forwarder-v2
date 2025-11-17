@@ -14,9 +14,9 @@ extern FDCAN_HandleTypeDef hfdcan3;
 extern "C" {
 #endif
 
-#define CONTROL_BUS 0
-#define SENSOR_BUS 1
-#define TRACTIVE_BUS 2
+#define CONTROL_BUS 1
+#define SENSOR_BUS 2
+#define TRACTIVE_BUS 3
 
 void initCAN();
 void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan);

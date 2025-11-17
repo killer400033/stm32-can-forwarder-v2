@@ -50,8 +50,4 @@ DWORD get_fattime(void)
 }
 
 /* USER CODE BEGIN Application */
-void MX_FATFS_DeInit(void)
-{
-  retSD = FATFS_UnLinkDriver(SDPath);
-}
 /* USER CODE END Application */

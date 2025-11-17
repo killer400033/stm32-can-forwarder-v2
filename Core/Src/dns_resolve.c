@@ -13,7 +13,7 @@ void dnsResolveThread(void *argument);
 osThreadId_t dnsResolveTaskHandle;
 const osThreadAttr_t dnsResolveTask_attributes = {
   .name = "DNS Resolve",
-  .stack_size = 512 * 4,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 
