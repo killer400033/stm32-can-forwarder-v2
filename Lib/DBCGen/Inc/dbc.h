@@ -8,6 +8,13 @@
 #define STATUS_OK 0
 #define STATUS_ERROR -1
 
+// Struct for FRONT_IMU_VELOCITY_NORMAL
+typedef struct {
+	double NormalVelocityX;
+	double NormalVelocityY;
+	double NormalVelocityZ;
+} FRONT_IMU_VELOCITY_NORMAL_t;
+
 // Struct for PEDALS_AND_STEERING
 typedef struct {
 	double SteeringAngle;
@@ -397,6 +404,7 @@ typedef struct {
 
 
 // Unpack function prototypes
+int8_t Unpack_FRONT_IMU_VELOCITY_NORMAL(FRONT_IMU_VELOCITY_NORMAL_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_PEDALS_AND_STEERING(PEDALS_AND_STEERING_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_FRONT_IMU_GYROS(FRONT_IMU_GYROS_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_FRONT_IMU_GPS_POS(FRONT_IMU_GPS_POS_t* _m, const uint8_t* _d, uint8_t len);
@@ -449,6 +457,7 @@ int8_t Unpack_CANHUB_STRAIN_LINKS(CANHUB_STRAIN_LINKS_t* _m, const uint8_t* _d, 
 int8_t Unpack_CANHUB_STRAIN_STEERING(CANHUB_STRAIN_STEERING_t* _m, const uint8_t* _d, uint8_t len);
 
 // Pack function prototypes
+int8_t Pack_FRONT_IMU_VELOCITY_NORMAL(const FRONT_IMU_VELOCITY_NORMAL_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_PEDALS_AND_STEERING(const PEDALS_AND_STEERING_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_FRONT_IMU_GYROS(const FRONT_IMU_GYROS_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_FRONT_IMU_GPS_POS(const FRONT_IMU_GPS_POS_t* _m, uint8_t* _d, uint8_t len);
@@ -501,6 +510,12 @@ int8_t Pack_CANHUB_STRAIN_LINKS(const CANHUB_STRAIN_LINKS_t* _m, uint8_t* _d, ui
 int8_t Pack_CANHUB_STRAIN_STEERING(const CANHUB_STRAIN_STEERING_t* _m, uint8_t* _d, uint8_t len);
 
 // Macros to apply scaling and offset
+#define UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYX(x) ( (((x) * (0.010000)) + (0.000000)) )
+#define UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYY(x) ( (((x) * (0.010000)) + (0.000000)) )
+#define UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYZ(x) ( (((x) * (0.010000)) + (0.000000)) )
+#define PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYX(x) ( (((x) - (0.000000)) / (0.010000)) )
+#define PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYY(x) ( (((x) - (0.000000)) / (0.010000)) )
+#define PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYZ(x) ( (((x) - (0.000000)) / (0.010000)) )
 #define UNPACK_SCALE_OFFSET_PEDALS_AND_STEERING_STEERINGANGLE(x) ( (((x) * (0.100000)) + (0.000000)) )
 #define PACK_SCALE_OFFSET_PEDALS_AND_STEERING_STEERINGANGLE(x) ( (((x) - (0.000000)) / (0.100000)) )
 #define UNPACK_SCALE_OFFSET_FRONT_IMU_GYROS_GYROX(x) ( (((x) * (0.001000)) + (0.000000)) )

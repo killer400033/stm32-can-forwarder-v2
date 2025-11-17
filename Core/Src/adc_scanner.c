@@ -10,34 +10,24 @@
 #include "log_handler.h"
 #include "app_layer.h"
 
-// ADC completion tracking
-static bool adc1_complete = false;
-static bool adc2_complete = false;
-static bool adc3_complete = false;
-
 // DMA buffers for ADC conversions (uint16_t for 12-bit ADC)
 static uint16_t adc1_dma_buffer[5];  // 5 channels for ADC1
 static uint16_t adc2_dma_buffer[5];  // 5 channels for ADC2
 // ADC3 uses BDMA which MUST be in SRAM4 (D3 domain) - BDMA cannot access other RAM!
 static uint16_t adc3_dma_buffer[2] __attribute__((section(".sram4")));  // 2 channels for ADC3
 
+// ADC completion tracking
+static bool adc1_complete = false;
+static bool adc2_complete = false;
+static bool adc3_complete = false;
+
 TIM_HandleTypeDef *ADCTimerInstance = NULL;
 
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
 extern ADC_HandleTypeDef hadc3;
-extern osMessageQueueId_t adcQueueHandle;
 extern osMessageQueueId_t canSrcQueueHandle;
 
-// ADC Packet Task
-osThreadId_t adcPacketTaskHandle;
-const osThreadAttr_t adcPacketTask_attributes = {
-  .name = "ADC Packet",
-  .stack_size = 1024 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-
-void adcPacketThread(void *argument);
 static void pushToWSandCAN(CanFrame *frame, uint8_t length);
 
 void ADC_Scanner_Init(TIM_HandleTypeDef *htim)
@@ -49,7 +39,6 @@ void ADC_Scanner_Init(TIM_HandleTypeDef *htim)
 
   ADCTimerInstance = htim;
 
-
   htim->Instance->PSC = 55000-1;
   htim->Instance->ARR = (ADC_TIM_CLK / 55000) / ADC_SAMPLE_RATE - 1;
   htim->Instance->CNT = 0;
@@ -59,158 +48,96 @@ void ADC_Scanner_Init(TIM_HandleTypeDef *htim)
   
   // Start timer with update (overflow) interrupt
   HAL_TIM_Base_Start_IT(htim);
-
-  // Create ADC packet task
-  adcPacketTaskHandle = osThreadNew(adcPacketThread, NULL, &adcPacketTask_attributes);
 }
 
 void ADC_Scanner_TriggerConversions(void)
 {
-  /* USER CODE BEGIN ADC_Scanner_TriggerConversions */
   // Reset completion tracking
   adc1_complete = false;
   adc2_complete = false;
   adc3_complete = false;
-  
+
   // Trigger ADC conversions on all 3 ADCs simultaneously using DMA
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc1_dma_buffer, 5);
   HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc2_dma_buffer, 5);
   HAL_ADC_Start_DMA(&hadc3, (uint32_t*)adc3_dma_buffer, 2);
-  /* USER CODE END ADC_Scanner_TriggerConversions */
 }
 
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-  // Mark the specific ADC as complete
-  if (hadc->Instance == ADC1) {
-    adc1_complete = true;
-  } else if (hadc->Instance == ADC2) {
-    adc2_complete = true;
-  } else if (hadc->Instance == ADC3) {
-    adc3_complete = true;
-  }
+	// Mark the specific ADC as complete
+	if (hadc->Instance == ADC1) {
+		adc1_complete = true;
+	} else if (hadc->Instance == ADC2) {
+		adc2_complete = true;
+	} else if (hadc->Instance == ADC3) {
+		adc3_complete = true;
+	}
 
-  // Only proceed when all 3 ADCs have completed
-  if (adc1_complete && adc2_complete && adc3_complete) {
-    // All ADCs completed - now read the data from DMA buffers
-  	ADC_ScanData_t data;
-    data.timestamp = getUnixTimeNanoseconds();
+	if (!adc1_complete || !adc2_complete || !adc3_complete) return;
 
-    // ADC1 DMA buffer[0] - Channel 16 - Strain gauge 0
-    data.strain_voltages[0] = ((float)adc1_dma_buffer[0] * 3.3f) / 4095.0f;
-    
-    // ADC1 DMA buffer[1] - Channel 17 - Strain gauge 1
-    data.strain_voltages[1] = ((float)adc1_dma_buffer[1] * 3.3f) / 4095.0f;
+	// Reusable CAN frame for all messages
+	CanFrame frame = {0};
+	frame.can_bus = CONTROL_BUS;
+	frame.timestamp = getUnixTimeNanoseconds();
+	float sensor_voltage;
 
-    // ADC1 DMA buffer[2] - Channel 18 - Gearbox temperature sensor 0
-    float sensor_voltage = ((float)adc1_dma_buffer[2] * 3.3f) / 4095.0f;
-    data.gearbox_temp[0] = -0.0258f * sensor_voltage + 2.8204f;
+	// Create CAN frame for coolant and oil temperature sensors (CAN ID 910)
+	CANHUB_TEMP_SENSORS_t tempMsg = {0};
+	sensor_voltage = ((float)adc1_dma_buffer[2] * 3.3f) / 4095.0f;
+	tempMsg.OilTempSensorLeft = -0.0258f * sensor_voltage + 2.8204f;
 
-    // ADC1 DMA buffer[3] - Channel 19 - Gearbox temperature sensor 1
-    sensor_voltage = ((float)adc1_dma_buffer[3] * 3.3f) / 4095.0f;
-    data.gearbox_temp[1] = -0.0258f * sensor_voltage + 2.8204f;
+	sensor_voltage = ((float)adc1_dma_buffer[3] * 3.3f) / 4095.0f;
+	tempMsg.OilTempSensorRight = -0.0258f * sensor_voltage + 2.8204f;
 
-    // ADC1 DMA buffer[4] - Channel 3 - Coolant temperature sensor 0
-    sensor_voltage = ((float)adc1_dma_buffer[4] * 3.3f) / 4095.0f;
-    data.coolant_temp[0] = -0.0262f * sensor_voltage + 2.8474f;
+	sensor_voltage = ((float)adc1_dma_buffer[4] * 3.3f) / 4095.0f;
+	tempMsg.CoolingTempSensorLeft = -0.0262f * sensor_voltage + 2.8474f;
 
-    // ADC2 DMA buffer[0] - Channel 14 - Strain gauge 2
-    data.strain_voltages[2] = ((float)adc2_dma_buffer[0] * 3.3f) / 4095.0f;
-    
-    // ADC2 DMA buffer[1] - Channel 15 - Strain gauge 3
-    data.strain_voltages[3] = ((float)adc2_dma_buffer[1] * 3.3f) / 4095.0f;
+	sensor_voltage = ((float)adc2_dma_buffer[2] * 3.3f) / 4095.0f;
+	tempMsg.CoolingTempSensorRight = -0.0262f * sensor_voltage + 2.8474f;
 
-    // ADC2 DMA buffer[2] - Channel 7 - Coolant temperature sensor 1
-    sensor_voltage = ((float)adc2_dma_buffer[2] * 3.3f) / 4095.0f;
-    data.coolant_temp[1] = -0.0262f * sensor_voltage + 2.8474f;
+	if (Pack_CANHUB_TEMP_SENSORS(&tempMsg, frame.can_data, 8) == STATUS_OK) {
+		frame.can_id = 910;
+		pushToWSandCAN(&frame, 8);
+	}
 
-    // ADC2 DMA buffer[3] - Channel 4 - Potentiometer 0
-    data.pot_voltages[0] = ((float)adc2_dma_buffer[3] * 3.3f) / 4095.0f;
-    
-    // ADC2 DMA buffer[4] - Channel 8 - Potentiometer 1
-    data.pot_voltages[1] = ((float)adc2_dma_buffer[4] * 3.3f) / 4095.0f;
+	// Create CAN frame for potentiometers (CAN ID 911)
+	CANHUB_POTS_t potMsg = {0};
+	potMsg.CanhubPot1 = ((float)adc2_dma_buffer[3] * 3.3f) / 4095.0f;
+	potMsg.CanhubPot2 = ((float)adc2_dma_buffer[4] * 3.3f) / 4095.0f;
 
-    // ADC3 DMA buffer[0] - Channel 0 - Strain gauge 4
-    data.strain_voltages[4] = ((float)adc3_dma_buffer[0] * 3.3f) / 4095.0f;
-    
-    // ADC3 DMA buffer[1] - Channel 1 - Strain gauge 5
-    data.strain_voltages[5] = ((float)adc3_dma_buffer[1] * 3.3f) / 4095.0f;
-    
-    // Append ADC data to queue
-    if (osMessageQueueGetSpace(adcQueueHandle) > 0) {
-      osMessageQueuePut(adcQueueHandle, &data, 0, 0);
-    }
-    else {
-        log_msg(LL_ERR, "ADC queue is full");
-    }
-    
-    // Stop DMA conversions
-    HAL_ADC_Stop_DMA(&hadc1);
-    HAL_ADC_Stop_DMA(&hadc2);
-    HAL_ADC_Stop_DMA(&hadc3);
-  }
-}
+	if (Pack_CANHUB_POTS(&potMsg, frame.can_data, 8) == STATUS_OK) {
+		frame.can_id = 911;
+		pushToWSandCAN(&frame, 4);
+	}
 
-// ADC Packet Task Thread
-void adcPacketThread(void *argument)
-{
-	ADC_ScanData_t adcData;
+	// Create CAN frame for strain gauge linkages (CAN ID 913)
+	CANHUB_STRAIN_LINKS_t strainLinkMsg = {0};
+	strainLinkMsg.LinkStrain1 = (int16_t)(((float)adc1_dma_buffer[0] * 3.3f) / 4095.0f);
+	strainLinkMsg.LinkStrain2 = (int16_t)(((float)adc1_dma_buffer[1] * 3.3f) / 4095.0f);
+	strainLinkMsg.LinkStrain3 = (int16_t)(((float)adc2_dma_buffer[0] * 3.3f) / 4095.0f);
+	strainLinkMsg.LinkStrain4 = (int16_t)(((float)adc2_dma_buffer[1] * 3.3f) / 4095.0f);
 
-  for (;;) {
-    // Wait for ADC data from queue
-    if (osMessageQueueGet(adcQueueHandle, &adcData, NULL, osWaitForever) == osOK) {
-      
-      // Reusable CAN frame for all messages
-      CanFrame frame = {0};
-      frame.can_bus = SENSOR_BUS;
-      frame.timestamp = adcData.timestamp;
+	if (Pack_CANHUB_STRAIN_LINKS(&strainLinkMsg, frame.can_data, 8) == STATUS_OK) {
+		frame.can_id = 913;
+		pushToWSandCAN(&frame, 8);
+	}
 
-      // Create CAN frame for coolant and oil temperature sensors (CAN ID 910)
-      CANHUB_TEMP_SENSORS_t tempMsg = {0};
-      tempMsg.OilTempSensorLeft = adcData.gearbox_temp[0];
-      tempMsg.OilTempSensorRight = adcData.gearbox_temp[1];
-      tempMsg.CoolingTempSensorLeft = adcData.coolant_temp[0];
-      tempMsg.CoolingTempSensorRight = adcData.coolant_temp[1];
-      
-      if (Pack_CANHUB_TEMP_SENSORS(&tempMsg, frame.can_data, 8) == STATUS_OK) {
-        frame.can_id = 910;
-        pushToWSandCAN(&frame, 8);
-      }
+	// Create CAN frame for strain gauge steering column (CAN ID 914)
+	CANHUB_STRAIN_STEERING_t strainSteerMsg = {0};
+	strainSteerMsg.SteeringStrain1 = (int16_t)(((float)adc3_dma_buffer[0] * 3.3f) / 4095.0f);
+	strainSteerMsg.SteeringStrain2 = (int16_t)(((float)adc3_dma_buffer[1] * 3.3f) / 4095.0f);
 
-      // Create CAN frame for potentiometers (CAN ID 911)
-      CANHUB_POTS_t potMsg = {0};
-      potMsg.CanhubPot1 = adcData.pot_voltages[0];
-      potMsg.CanhubPot2 = adcData.pot_voltages[1];
-      
-      if (Pack_CANHUB_POTS(&potMsg, frame.can_data, 8) == STATUS_OK) {
-        frame.can_id = 911;
-        pushToWSandCAN(&frame, 4);
-      }
+	if (Pack_CANHUB_STRAIN_STEERING(&strainSteerMsg, frame.can_data, 8) == STATUS_OK) {
+		frame.can_id = 914;
+		pushToWSandCAN(&frame, 4);
+	}
 
-      // Create CAN frame for strain gauge linkages (CAN ID 913)
-      CANHUB_STRAIN_LINKS_t strainLinkMsg = {0};
-      strainLinkMsg.LinkStrain1 = (int16_t)adcData.strain_voltages[0];
-      strainLinkMsg.LinkStrain2 = (int16_t)adcData.strain_voltages[1];
-      strainLinkMsg.LinkStrain3 = (int16_t)adcData.strain_voltages[2];
-      strainLinkMsg.LinkStrain4 = (int16_t)adcData.strain_voltages[3];
-      
-      if (Pack_CANHUB_STRAIN_LINKS(&strainLinkMsg, frame.can_data, 8) == STATUS_OK) {
-        frame.can_id = 913;
-        pushToWSandCAN(&frame, 8);
-      }
-
-      // Create CAN frame for strain gauge steering column (CAN ID 915)
-      CANHUB_STRAIN_STEERING_t strainSteerMsg = {0};
-      strainSteerMsg.SteeringStrain1 = (int16_t)adcData.strain_voltages[4];
-      strainSteerMsg.SteeringStrain2 = (int16_t)adcData.strain_voltages[5];
-      
-      if (Pack_CANHUB_STRAIN_STEERING(&strainSteerMsg, frame.can_data, 8) == STATUS_OK) {
-        frame.can_id = 914;
-        pushToWSandCAN(&frame, 4);
-      }
-    }
-  }
+  // Stop DMA conversions
+  HAL_ADC_Stop_DMA(&hadc1);
+  HAL_ADC_Stop_DMA(&hadc2);
+  HAL_ADC_Stop_DMA(&hadc3);
 }
 
 static void pushToWSandCAN(CanFrame *frame, uint8_t length)

@@ -1,5 +1,19 @@
 #include "dbc.h"
 
+// Unpack signals from FRONT_IMU_VELOCITY_NORMAL
+int8_t Unpack_FRONT_IMU_VELOCITY_NORMAL(FRONT_IMU_VELOCITY_NORMAL_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 6u) return STATUS_ERROR;
+
+	// Extracting NormalVelocityX
+	_m->NormalVelocityX = (double)UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYX(((_d[0] & 0xffu) >> 0u) | ((_d[1] & 0xffu) << 8u));
+	// Extracting NormalVelocityY
+	_m->NormalVelocityY = (double)UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYY(((_d[2] & 0xffu) >> 0u) | ((_d[3] & 0xffu) << 8u));
+	// Extracting NormalVelocityZ
+	_m->NormalVelocityZ = (double)UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYZ(((_d[4] & 0xffu) >> 0u) | ((_d[5] & 0xffu) << 8u));
+
+	return STATUS_OK;
+}
+
 // Unpack signals from PEDALS_AND_STEERING
 int8_t Unpack_PEDALS_AND_STEERING(PEDALS_AND_STEERING_t* _m, const uint8_t* _d, uint8_t len) {
 	if (len < 6u) return STATUS_ERROR;
@@ -770,6 +784,22 @@ int8_t Unpack_CANHUB_STRAIN_STEERING(CANHUB_STRAIN_STEERING_t* _m, const uint8_t
 	_m->SteeringStrain1 = ((_d[0] & 0xffu) << 4u) | ((_d[1] & 0xf0u) >> 4u);
 	// Extracting SteeringStrain2
 	_m->SteeringStrain2 = ((_d[2] & 0xffu) << 4u) | ((_d[3] & 0xf0u) >> 4u);
+
+	return STATUS_OK;
+}
+
+// Pack signals from FRONT_IMU_VELOCITY_NORMAL
+int8_t Pack_FRONT_IMU_VELOCITY_NORMAL(const FRONT_IMU_VELOCITY_NORMAL_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 6u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 6u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYX(_m->NormalVelocityX)) << 0u) & 0xffu);
+	_d[1] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYX(_m->NormalVelocityX)) >> 8u) & 0xffu);
+	_d[2] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYY(_m->NormalVelocityY)) << 0u) & 0xffu);
+	_d[3] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYY(_m->NormalVelocityY)) >> 8u) & 0xffu);
+	_d[4] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYZ(_m->NormalVelocityZ)) << 0u) & 0xffu);
+	_d[5] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYZ(_m->NormalVelocityZ)) >> 8u) & 0xffu);
 
 	return STATUS_OK;
 }

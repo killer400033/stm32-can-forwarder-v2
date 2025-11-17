@@ -98,11 +98,6 @@ osMessageQueueId_t canSrcQueueHandle;
 const osMessageQueueAttr_t canSrcQueue_attributes = {
   .name = "canSrcQueue"
 };
-/* Definitions for adcQueue */
-osMessageQueueId_t adcQueueHandle;
-const osMessageQueueAttr_t adcQueue_attributes = {
-  .name = "adcQueue"
-};
 /* Definitions for dnsReqQueue */
 osMessageQueueId_t dnsReqQueueHandle;
 const osMessageQueueAttr_t dnsReqQueue_attributes = {
@@ -228,9 +223,6 @@ int main(void)
 
   /* creation of canSrcQueue */
   canSrcQueueHandle = osMessageQueueNew (128, sizeof(CanFrame), &canSrcQueue_attributes);
-
-  /* creation of adcQueue */
-  adcQueueHandle = osMessageQueueNew (2, sizeof(ADC_ScanData_t), &adcQueue_attributes);
 
   /* creation of dnsReqQueue */
   dnsReqQueueHandle = osMessageQueueNew (4, sizeof(dns_request_t), &dnsReqQueue_attributes);
