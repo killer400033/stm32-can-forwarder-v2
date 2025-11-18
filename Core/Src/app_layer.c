@@ -25,8 +25,6 @@ const osThreadAttr_t appLayerTask_attributes = {
 pb_byte_t buffer[512];
 static CanFrameList_t canFrameList = {0};
 
-volatile uint32_t dropped_packets = 0;
-
 void appLayerThread(void *argument);
 static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *canFrames);
 static bool canFramesEncode(pb_ostream_t *stream, const pb_field_iter_t *field, void * const *arg);
@@ -71,7 +69,7 @@ void appLayerThread(void *argument) {
 		if (ws_client.state == WS_STATE_CONNECTED && !connected) {
 			log_msg(LL_DBG, "WebSocket connected!");
 			connected = true;
-	    }
+	  }
 		if (ws_client.state == WS_STATE_DISCONNECTED && connected) {
 			log_msg(LL_WRN, "WebSocket disconnected...");
 			connected = false;

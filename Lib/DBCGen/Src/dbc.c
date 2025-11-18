@@ -1,5 +1,19 @@
 #include "dbc.h"
 
+// Unpack signals from FRONT_IMU_VELOCITY_NORMAL
+int8_t Unpack_FRONT_IMU_VELOCITY_NORMAL(FRONT_IMU_VELOCITY_NORMAL_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 6u) return STATUS_ERROR;
+
+	// Extracting NormalVelocityX
+	_m->NormalVelocityX = (double)UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYX(((_d[0] & 0xffu) >> 0u) | ((_d[1] & 0xffu) << 8u));
+	// Extracting NormalVelocityY
+	_m->NormalVelocityY = (double)UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYY(((_d[2] & 0xffu) >> 0u) | ((_d[3] & 0xffu) << 8u));
+	// Extracting NormalVelocityZ
+	_m->NormalVelocityZ = (double)UNPACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYZ(((_d[4] & 0xffu) >> 0u) | ((_d[5] & 0xffu) << 8u));
+
+	return STATUS_OK;
+}
+
 // Unpack signals from PEDALS_AND_STEERING
 int8_t Unpack_PEDALS_AND_STEERING(PEDALS_AND_STEERING_t* _m, const uint8_t* _d, uint8_t len) {
 	if (len < 6u) return STATUS_ERROR;
@@ -314,8 +328,8 @@ int8_t Unpack_REAR_IMU_SLIPS(REAR_IMU_SLIPS_t* _m, const uint8_t* _d, uint8_t le
 	return STATUS_OK;
 }
 
-// Unpack signals from REAR_IMU_STATUS_03
-int8_t Unpack_REAR_IMU_STATUS_03(REAR_IMU_STATUS_03_t* _m, const uint8_t* _d, uint8_t len) {
+// Unpack signals from FRONT_IMU_STATUS_03
+int8_t Unpack_FRONT_IMU_STATUS_03(FRONT_IMU_STATUS_03_t* _m, const uint8_t* _d, uint8_t len) {
 	if (len < 6u) return STATUS_ERROR;
 
 	// Extracting SolutionMode
@@ -402,56 +416,6 @@ int8_t Unpack_COOLANT_TEMPS(COOLANT_TEMPS_t* _m, const uint8_t* _d, uint8_t len)
 	_m->CoolantTempFanIN = (double)UNPACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPFANIN(((_d[2] & 0xffu) << 8u) | ((_d[3] & 0xffu) >> 0u));
 	// Extracting CoolantTempFanOUT
 	_m->CoolantTempFanOUT = (double)UNPACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPFANOUT(((_d[4] & 0xffu) << 8u) | ((_d[5] & 0xffu) >> 0u));
-
-	return STATUS_OK;
-}
-
-// Unpack signals from STEERING_WHEEL_BUTTONS
-int8_t Unpack_STEERING_WHEEL_BUTTONS(STEERING_WHEEL_BUTTONS_t* _m, const uint8_t* _d, uint8_t len) {
-	if (len < 6u) return STATUS_ERROR;
-
-	// Extracting Button7
-	_m->Button7 = ((_d[0] & 0x80u) >> 7u);
-	// Extracting Button6
-	_m->Button6 = ((_d[0] & 0x40u) >> 6u);
-	// Extracting Button5
-	_m->Button5 = ((_d[0] & 0x20u) >> 5u);
-	// Extracting Button4
-	_m->Button4 = ((_d[0] & 0x10u) >> 4u);
-	// Extracting Button3
-	_m->Button3 = ((_d[0] & 0x08u) >> 3u);
-	// Extracting Button2
-	_m->Button2 = ((_d[0] & 0x04u) >> 2u);
-	// Extracting Button1
-	_m->Button1 = ((_d[0] & 0x02u) >> 1u);
-	// Extracting Button7Hold
-	_m->Button7Hold = ((_d[0] & 0x01u) >> 0u);
-	// Extracting Button6Hold
-	_m->Button6Hold = ((_d[1] & 0x80u) >> 7u);
-	// Extracting Button5Hold
-	_m->Button5Hold = ((_d[1] & 0x40u) >> 6u);
-	// Extracting Button4Hold
-	_m->Button4Hold = ((_d[1] & 0x20u) >> 5u);
-	// Extracting Button3Hold
-	_m->Button3Hold = ((_d[1] & 0x10u) >> 4u);
-	// Extracting Button2Hold
-	_m->Button2Hold = ((_d[1] & 0x08u) >> 3u);
-	// Extracting Button1Hold
-	_m->Button1Hold = ((_d[1] & 0x04u) >> 2u);
-	// Extracting Button7_hold_time
-	_m->Button7_hold_time = (double)UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON7_HOLD_TIME(((_d[1] & 0x03u) << 2u) | ((_d[2] & 0xc0u) >> 6u));
-	// Extracting Button6_hold_time
-	_m->Button6_hold_time = (double)UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON6_HOLD_TIME(((_d[2] & 0x3cu) >> 2u));
-	// Extracting Button5_hold_time
-	_m->Button5_hold_time = (double)UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON5_HOLD_TIME(((_d[2] & 0x03u) << 2u) | ((_d[3] & 0xc0u) >> 6u));
-	// Extracting Button4_hold_time
-	_m->Button4_hold_time = (double)UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON4_HOLD_TIME(((_d[3] & 0x3cu) >> 2u));
-	// Extracting Button3_hold_time
-	_m->Button3_hold_time = (double)UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON3_HOLD_TIME(((_d[3] & 0x03u) << 2u) | ((_d[4] & 0xc0u) >> 6u));
-	// Extracting Button2_hold_time
-	_m->Button2_hold_time = (double)UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON2_HOLD_TIME(((_d[4] & 0x3cu) >> 2u));
-	// Extracting Button1_hold_time
-	_m->Button1_hold_time = (double)UNPACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON1_HOLD_TIME(((_d[4] & 0x03u) << 2u) | ((_d[5] & 0xc0u) >> 6u));
 
 	return STATUS_OK;
 }
@@ -654,18 +618,18 @@ int8_t Unpack_AV_DEBUG_DISPLAY_5(AV_DEBUG_DISPLAY_5_t* _m, const uint8_t* _d, ui
 int8_t Unpack_ODOMETER_UPDATE(ODOMETER_UPDATE_t* _m, const uint8_t* _d, uint8_t len) {
 	if (len < 3u) return STATUS_ERROR;
 
-	// Extracting Odometer_Update_Val
-	_m->Odometer_Update_Val = ((_d[0] & 0xffu) << 16u) | ((_d[1] & 0xffu) << 8u) | ((_d[2] & 0xffu) >> 0u);
+	// Extracting Odometer
+	_m->Odometer = ((_d[0] & 0xffu) << 16u) | ((_d[1] & 0xffu) << 8u) | ((_d[2] & 0xffu) >> 0u);
 
 	return STATUS_OK;
 }
 
-// Unpack signals from ODOMETER_READING
-int8_t Unpack_ODOMETER_READING(ODOMETER_READING_t* _m, const uint8_t* _d, uint8_t len) {
+// Unpack signals from ODOMETER_SAVE
+int8_t Unpack_ODOMETER_SAVE(ODOMETER_SAVE_t* _m, const uint8_t* _d, uint8_t len) {
 	if (len < 3u) return STATUS_ERROR;
 
-	// Extracting Odometer
-	_m->Odometer = ((_d[0] & 0xffu) << 16u) | ((_d[1] & 0xffu) << 8u) | ((_d[2] & 0xffu) >> 0u);
+	// Extracting OdometerS
+	_m->OdometerS = ((_d[0] & 0xffu) << 16u) | ((_d[1] & 0xffu) << 8u) | ((_d[2] & 0xffu) >> 0u);
 
 	return STATUS_OK;
 }
@@ -676,6 +640,166 @@ int8_t Unpack_TIMESTAMP_READING(TIMESTAMP_READING_t* _m, const uint8_t* _d, uint
 
 	// Extracting Time_UNIX
 	_m->Time_UNIX = ((_d[0] & 0xffu) << 24u) | ((_d[1] & 0xffu) << 16u) | ((_d[2] & 0xffu) << 8u) | ((_d[3] & 0xffu) >> 0u);
+
+	return STATUS_OK;
+}
+
+// Unpack signals from RTD_MODES_FLASH
+int8_t Unpack_RTD_MODES_FLASH(RTD_MODES_FLASH_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 2u) return STATUS_ERROR;
+
+	// Extracting RTDMode
+	_m->RTDMode = ((_d[0] & 0xe0u) >> 5u);
+	// Extracting TorqueLimit
+	_m->TorqueLimit = ((_d[0] & 0x18u) >> 3u);
+	// Extracting PowerLimit
+	_m->PowerLimit = ((_d[0] & 0x06u) >> 1u);
+	// Extracting RegenLimit
+	_m->RegenLimit = ((_d[0] & 0x01u) << 1u) | ((_d[1] & 0x80u) >> 7u);
+	// Extracting RegenMode
+	_m->RegenMode = ((_d[1] & 0x60u) >> 5u);
+	// Extracting TorqueVectoringMode
+	_m->TorqueVectoringMode = ((_d[1] & 0x18u) >> 3u);
+	// Extracting SpeedSetPoint
+	_m->SpeedSetPoint = ((_d[1] & 0x04u) >> 2u);
+	// Extracting LaunchDisable
+	_m->LaunchDisable = ((_d[1] & 0x02u) >> 1u);
+
+	return STATUS_OK;
+}
+
+// Unpack signals from RTD_MODES_SAVE
+int8_t Unpack_RTD_MODES_SAVE(RTD_MODES_SAVE_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 2u) return STATUS_ERROR;
+
+	// Extracting RTDModeS
+	_m->RTDModeS = ((_d[0] & 0xe0u) >> 5u);
+	// Extracting TorqueLimitS
+	_m->TorqueLimitS = ((_d[0] & 0x18u) >> 3u);
+	// Extracting PowerLimitS
+	_m->PowerLimitS = ((_d[0] & 0x06u) >> 1u);
+	// Extracting RegenLimitS
+	_m->RegenLimitS = ((_d[0] & 0x01u) << 1u) | ((_d[1] & 0x80u) >> 7u);
+	// Extracting RegenModeS
+	_m->RegenModeS = ((_d[1] & 0x60u) >> 5u);
+	// Extracting TorqueVectoringModeS
+	_m->TorqueVectoringModeS = ((_d[1] & 0x18u) >> 3u);
+	// Extracting SpeedSetPointS
+	_m->SpeedSetPointS = ((_d[1] & 0x04u) >> 2u);
+	// Extracting LaunchDisableS
+	_m->LaunchDisableS = ((_d[1] & 0x02u) >> 1u);
+
+	return STATUS_OK;
+}
+
+// Unpack signals from RTD_MODES_UPDATE
+int8_t Unpack_RTD_MODES_UPDATE(RTD_MODES_UPDATE_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 2u) return STATUS_ERROR;
+
+	// Extracting RTDModeU
+	_m->RTDModeU = ((_d[0] & 0xe0u) >> 5u);
+	// Extracting TorqueLimitU
+	_m->TorqueLimitU = ((_d[0] & 0x18u) >> 3u);
+	// Extracting PowerLimitU
+	_m->PowerLimitU = ((_d[0] & 0x06u) >> 1u);
+	// Extracting RegenLimitU
+	_m->RegenLimitU = ((_d[0] & 0x01u) << 1u) | ((_d[1] & 0x80u) >> 7u);
+	// Extracting RegenModeU
+	_m->RegenModeU = ((_d[1] & 0x60u) >> 5u);
+	// Extracting TorqueVectoringModeU
+	_m->TorqueVectoringModeU = ((_d[1] & 0x18u) >> 3u);
+	// Extracting SpeedSetPointU
+	_m->SpeedSetPointU = ((_d[1] & 0x04u) >> 2u);
+	// Extracting LaunchDisableU
+	_m->LaunchDisableU = ((_d[1] & 0x02u) >> 1u);
+
+	return STATUS_OK;
+}
+
+// Unpack signals from CANHUB_TEMP_SENSORS
+int8_t Unpack_CANHUB_TEMP_SENSORS(CANHUB_TEMP_SENSORS_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 8u) return STATUS_ERROR;
+
+	// Extracting OilTempSensorLeft
+	_m->OilTempSensorLeft = (double)UNPACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_OILTEMPSENSORLEFT(((_d[0] & 0xffu) << 8u) | ((_d[1] & 0xffu) >> 0u));
+	// Extracting OilTempSensorRight
+	_m->OilTempSensorRight = (double)UNPACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_OILTEMPSENSORRIGHT(((_d[2] & 0xffu) << 8u) | ((_d[3] & 0xffu) >> 0u));
+	// Extracting CoolingTempSensorLeft
+	_m->CoolingTempSensorLeft = (double)UNPACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_COOLINGTEMPSENSORLEFT(((_d[4] & 0xffu) << 8u) | ((_d[5] & 0xffu) >> 0u));
+	// Extracting CoolingTempSensorRight
+	_m->CoolingTempSensorRight = (double)UNPACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_COOLINGTEMPSENSORRIGHT(((_d[6] & 0xffu) << 8u) | ((_d[7] & 0xffu) >> 0u));
+
+	return STATUS_OK;
+}
+
+// Unpack signals from CANHUB_POTS
+int8_t Unpack_CANHUB_POTS(CANHUB_POTS_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 4u) return STATUS_ERROR;
+
+	// Extracting CanhubPot1
+	_m->CanhubPot1 = (double)UNPACK_SCALE_OFFSET_CANHUB_POTS_CANHUBPOT1(((_d[0] & 0xffu) << 4u) | ((_d[1] & 0xf0u) >> 4u));
+	// Extracting CanhubPot2
+	_m->CanhubPot2 = (double)UNPACK_SCALE_OFFSET_CANHUB_POTS_CANHUBPOT2(((_d[2] & 0xffu) << 4u) | ((_d[3] & 0xf0u) >> 4u));
+
+	return STATUS_OK;
+}
+
+// Unpack signals from CANHUB_THERMOCOUPLES
+int8_t Unpack_CANHUB_THERMOCOUPLES(CANHUB_THERMOCOUPLES_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 8u) return STATUS_ERROR;
+
+	// Extracting ThermoFL
+	_m->ThermoFL = (double)UNPACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMOFL(((_d[0] & 0xffu) << 8u) | ((_d[1] & 0xffu) >> 0u));
+	// Extracting ThermoFR
+	_m->ThermoFR = (double)UNPACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMOFR(((_d[2] & 0xffu) << 8u) | ((_d[3] & 0xffu) >> 0u));
+	// Extracting ThermoRL
+	_m->ThermoRL = (double)UNPACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMORL(((_d[4] & 0xffu) << 8u) | ((_d[5] & 0xffu) >> 0u));
+	// Extracting ThermoRR
+	_m->ThermoRR = (double)UNPACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMORR(((_d[6] & 0xffu) << 8u) | ((_d[7] & 0xffu) >> 0u));
+
+	return STATUS_OK;
+}
+
+// Unpack signals from CANHUB_STRAIN_LINKS
+int8_t Unpack_CANHUB_STRAIN_LINKS(CANHUB_STRAIN_LINKS_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 8u) return STATUS_ERROR;
+
+	// Extracting LinkStrain1
+	_m->LinkStrain1 = ((_d[0] & 0xffu) << 4u) | ((_d[1] & 0xf0u) >> 4u);
+	// Extracting LinkStrain2
+	_m->LinkStrain2 = ((_d[2] & 0xffu) << 4u) | ((_d[3] & 0xf0u) >> 4u);
+	// Extracting LinkStrain3
+	_m->LinkStrain3 = ((_d[4] & 0xffu) << 4u) | ((_d[5] & 0xf0u) >> 4u);
+	// Extracting LinkStrain4
+	_m->LinkStrain4 = ((_d[6] & 0xffu) << 4u) | ((_d[7] & 0xf0u) >> 4u);
+
+	return STATUS_OK;
+}
+
+// Unpack signals from CANHUB_STRAIN_STEERING
+int8_t Unpack_CANHUB_STRAIN_STEERING(CANHUB_STRAIN_STEERING_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 4u) return STATUS_ERROR;
+
+	// Extracting SteeringStrain1
+	_m->SteeringStrain1 = ((_d[0] & 0xffu) << 4u) | ((_d[1] & 0xf0u) >> 4u);
+	// Extracting SteeringStrain2
+	_m->SteeringStrain2 = ((_d[2] & 0xffu) << 4u) | ((_d[3] & 0xf0u) >> 4u);
+
+	return STATUS_OK;
+}
+
+// Pack signals from FRONT_IMU_VELOCITY_NORMAL
+int8_t Pack_FRONT_IMU_VELOCITY_NORMAL(const FRONT_IMU_VELOCITY_NORMAL_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 6u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 6u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYX(_m->NormalVelocityX)) << 0u) & 0xffu);
+	_d[1] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYX(_m->NormalVelocityX)) >> 8u) & 0xffu);
+	_d[2] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYY(_m->NormalVelocityY)) << 0u) & 0xffu);
+	_d[3] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYY(_m->NormalVelocityY)) >> 8u) & 0xffu);
+	_d[4] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYZ(_m->NormalVelocityZ)) << 0u) & 0xffu);
+	_d[5] |= (( ((uint16_t)PACK_SCALE_OFFSET_FRONT_IMU_VELOCITY_NORMAL_NORMALVELOCITYZ(_m->NormalVelocityZ)) >> 8u) & 0xffu);
 
 	return STATUS_OK;
 }
@@ -1062,8 +1186,8 @@ int8_t Pack_REAR_IMU_SLIPS(const REAR_IMU_SLIPS_t* _m, uint8_t* _d, uint8_t len)
 	return STATUS_OK;
 }
 
-// Pack signals from REAR_IMU_STATUS_03
-int8_t Pack_REAR_IMU_STATUS_03(const REAR_IMU_STATUS_03_t* _m, uint8_t* _d, uint8_t len) {
+// Pack signals from FRONT_IMU_STATUS_03
+int8_t Pack_FRONT_IMU_STATUS_03(const FRONT_IMU_STATUS_03_t* _m, uint8_t* _d, uint8_t len) {
 	if (len < 6u) return STATUS_ERROR;
 
 	for (uint8_t i = 0u; i < 6u; _d[i++] = 0u);
@@ -1157,41 +1281,6 @@ int8_t Pack_COOLANT_TEMPS(const COOLANT_TEMPS_t* _m, uint8_t* _d, uint8_t len) {
 	_d[3] |= (( ((uint16_t)PACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPFANIN(_m->CoolantTempFanIN)) << 0u) & 0xffu);
 	_d[4] |= (( ((uint16_t)PACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPFANOUT(_m->CoolantTempFanOUT)) >> 8u) & 0xffu);
 	_d[5] |= (( ((uint16_t)PACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPFANOUT(_m->CoolantTempFanOUT)) << 0u) & 0xffu);
-
-	return STATUS_OK;
-}
-
-// Pack signals from STEERING_WHEEL_BUTTONS
-int8_t Pack_STEERING_WHEEL_BUTTONS(const STEERING_WHEEL_BUTTONS_t* _m, uint8_t* _d, uint8_t len) {
-	if (len < 6u) return STATUS_ERROR;
-
-	for (uint8_t i = 0u; i < 6u; _d[i++] = 0u);
-
-	_d[0] |= (( ((uint8_t)(_m->Button7)) << 7u) & 0x80u);
-	_d[0] |= (( ((uint8_t)(_m->Button6)) << 6u) & 0x40u);
-	_d[0] |= (( ((uint8_t)(_m->Button5)) << 5u) & 0x20u);
-	_d[0] |= (( ((uint8_t)(_m->Button4)) << 4u) & 0x10u);
-	_d[0] |= (( ((uint8_t)(_m->Button3)) << 3u) & 0x08u);
-	_d[0] |= (( ((uint8_t)(_m->Button2)) << 2u) & 0x04u);
-	_d[0] |= (( ((uint8_t)(_m->Button1)) << 1u) & 0x02u);
-	_d[0] |= (( ((uint8_t)(_m->Button7Hold)) << 0u) & 0x01u);
-	_d[1] |= (( ((uint8_t)(_m->Button6Hold)) << 7u) & 0x80u);
-	_d[1] |= (( ((uint8_t)(_m->Button5Hold)) << 6u) & 0x40u);
-	_d[1] |= (( ((uint8_t)(_m->Button4Hold)) << 5u) & 0x20u);
-	_d[1] |= (( ((uint8_t)(_m->Button3Hold)) << 4u) & 0x10u);
-	_d[1] |= (( ((uint8_t)(_m->Button2Hold)) << 3u) & 0x08u);
-	_d[1] |= (( ((uint8_t)(_m->Button1Hold)) << 2u) & 0x04u);
-	_d[1] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON7_HOLD_TIME(_m->Button7_hold_time)) >> 2u) & 0x03u);
-	_d[2] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON7_HOLD_TIME(_m->Button7_hold_time)) << 6u) & 0xc0u);
-	_d[2] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON6_HOLD_TIME(_m->Button6_hold_time)) << 2u) & 0x3cu);
-	_d[2] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON5_HOLD_TIME(_m->Button5_hold_time)) >> 2u) & 0x03u);
-	_d[3] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON5_HOLD_TIME(_m->Button5_hold_time)) << 6u) & 0xc0u);
-	_d[3] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON4_HOLD_TIME(_m->Button4_hold_time)) << 2u) & 0x3cu);
-	_d[3] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON3_HOLD_TIME(_m->Button3_hold_time)) >> 2u) & 0x03u);
-	_d[4] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON3_HOLD_TIME(_m->Button3_hold_time)) << 6u) & 0xc0u);
-	_d[4] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON2_HOLD_TIME(_m->Button2_hold_time)) << 2u) & 0x3cu);
-	_d[4] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON1_HOLD_TIME(_m->Button1_hold_time)) >> 2u) & 0x03u);
-	_d[5] |= (( ((uint8_t)PACK_SCALE_OFFSET_STEERING_WHEEL_BUTTONS_BUTTON1_HOLD_TIME(_m->Button1_hold_time)) << 6u) & 0xc0u);
 
 	return STATUS_OK;
 }
@@ -1390,22 +1479,22 @@ int8_t Pack_ODOMETER_UPDATE(const ODOMETER_UPDATE_t* _m, uint8_t* _d, uint8_t le
 
 	for (uint8_t i = 0u; i < 3u; _d[i++] = 0u);
 
-	_d[0] |= (( ((uint32_t)(_m->Odometer_Update_Val)) >> 16u) & 0xffu);
-	_d[1] |= (( ((uint32_t)(_m->Odometer_Update_Val)) >> 8u) & 0xffu);
-	_d[2] |= (( ((uint32_t)(_m->Odometer_Update_Val)) << 0u) & 0xffu);
+	_d[0] |= (( ((uint32_t)(_m->Odometer)) >> 16u) & 0xffu);
+	_d[1] |= (( ((uint32_t)(_m->Odometer)) >> 8u) & 0xffu);
+	_d[2] |= (( ((uint32_t)(_m->Odometer)) << 0u) & 0xffu);
 
 	return STATUS_OK;
 }
 
-// Pack signals from ODOMETER_READING
-int8_t Pack_ODOMETER_READING(const ODOMETER_READING_t* _m, uint8_t* _d, uint8_t len) {
+// Pack signals from ODOMETER_SAVE
+int8_t Pack_ODOMETER_SAVE(const ODOMETER_SAVE_t* _m, uint8_t* _d, uint8_t len) {
 	if (len < 3u) return STATUS_ERROR;
 
 	for (uint8_t i = 0u; i < 3u; _d[i++] = 0u);
 
-	_d[0] |= (( ((uint32_t)(_m->Odometer)) >> 16u) & 0xffu);
-	_d[1] |= (( ((uint32_t)(_m->Odometer)) >> 8u) & 0xffu);
-	_d[2] |= (( ((uint32_t)(_m->Odometer)) << 0u) & 0xffu);
+	_d[0] |= (( ((uint32_t)(_m->OdometerS)) >> 16u) & 0xffu);
+	_d[1] |= (( ((uint32_t)(_m->OdometerS)) >> 8u) & 0xffu);
+	_d[2] |= (( ((uint32_t)(_m->OdometerS)) << 0u) & 0xffu);
 
 	return STATUS_OK;
 }
@@ -1420,6 +1509,145 @@ int8_t Pack_TIMESTAMP_READING(const TIMESTAMP_READING_t* _m, uint8_t* _d, uint8_
 	_d[1] |= (( ((uint32_t)(_m->Time_UNIX)) >> 16u) & 0xffu);
 	_d[2] |= (( ((uint32_t)(_m->Time_UNIX)) >> 8u) & 0xffu);
 	_d[3] |= (( ((uint32_t)(_m->Time_UNIX)) << 0u) & 0xffu);
+
+	return STATUS_OK;
+}
+
+// Pack signals from RTD_MODES_FLASH
+int8_t Pack_RTD_MODES_FLASH(const RTD_MODES_FLASH_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 2u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 2u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint8_t)(_m->RTDMode)) << 5u) & 0xe0u);
+	_d[0] |= (( ((uint8_t)(_m->TorqueLimit)) << 3u) & 0x18u);
+	_d[0] |= (( ((uint8_t)(_m->PowerLimit)) << 1u) & 0x06u);
+	_d[0] |= (( ((uint8_t)(_m->RegenLimit)) >> 1u) & 0x01u);
+	_d[1] |= (( ((uint8_t)(_m->RegenLimit)) << 7u) & 0x80u);
+	_d[1] |= (( ((uint8_t)(_m->RegenMode)) << 5u) & 0x60u);
+	_d[1] |= (( ((uint8_t)(_m->TorqueVectoringMode)) << 3u) & 0x18u);
+	_d[1] |= (( ((uint8_t)(_m->SpeedSetPoint)) << 2u) & 0x04u);
+	_d[1] |= (( ((uint8_t)(_m->LaunchDisable)) << 1u) & 0x02u);
+
+	return STATUS_OK;
+}
+
+// Pack signals from RTD_MODES_SAVE
+int8_t Pack_RTD_MODES_SAVE(const RTD_MODES_SAVE_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 2u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 2u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint8_t)(_m->RTDModeS)) << 5u) & 0xe0u);
+	_d[0] |= (( ((uint8_t)(_m->TorqueLimitS)) << 3u) & 0x18u);
+	_d[0] |= (( ((uint8_t)(_m->PowerLimitS)) << 1u) & 0x06u);
+	_d[0] |= (( ((uint8_t)(_m->RegenLimitS)) >> 1u) & 0x01u);
+	_d[1] |= (( ((uint8_t)(_m->RegenLimitS)) << 7u) & 0x80u);
+	_d[1] |= (( ((uint8_t)(_m->RegenModeS)) << 5u) & 0x60u);
+	_d[1] |= (( ((uint8_t)(_m->TorqueVectoringModeS)) << 3u) & 0x18u);
+	_d[1] |= (( ((uint8_t)(_m->SpeedSetPointS)) << 2u) & 0x04u);
+	_d[1] |= (( ((uint8_t)(_m->LaunchDisableS)) << 1u) & 0x02u);
+
+	return STATUS_OK;
+}
+
+// Pack signals from RTD_MODES_UPDATE
+int8_t Pack_RTD_MODES_UPDATE(const RTD_MODES_UPDATE_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 2u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 2u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint8_t)(_m->RTDModeU)) << 5u) & 0xe0u);
+	_d[0] |= (( ((uint8_t)(_m->TorqueLimitU)) << 3u) & 0x18u);
+	_d[0] |= (( ((uint8_t)(_m->PowerLimitU)) << 1u) & 0x06u);
+	_d[0] |= (( ((uint8_t)(_m->RegenLimitU)) >> 1u) & 0x01u);
+	_d[1] |= (( ((uint8_t)(_m->RegenLimitU)) << 7u) & 0x80u);
+	_d[1] |= (( ((uint8_t)(_m->RegenModeU)) << 5u) & 0x60u);
+	_d[1] |= (( ((uint8_t)(_m->TorqueVectoringModeU)) << 3u) & 0x18u);
+	_d[1] |= (( ((uint8_t)(_m->SpeedSetPointU)) << 2u) & 0x04u);
+	_d[1] |= (( ((uint8_t)(_m->LaunchDisableU)) << 1u) & 0x02u);
+
+	return STATUS_OK;
+}
+
+// Pack signals from CANHUB_TEMP_SENSORS
+int8_t Pack_CANHUB_TEMP_SENSORS(const CANHUB_TEMP_SENSORS_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 8u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 8u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_OILTEMPSENSORLEFT(_m->OilTempSensorLeft)) >> 8u) & 0xffu);
+	_d[1] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_OILTEMPSENSORLEFT(_m->OilTempSensorLeft)) << 0u) & 0xffu);
+	_d[2] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_OILTEMPSENSORRIGHT(_m->OilTempSensorRight)) >> 8u) & 0xffu);
+	_d[3] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_OILTEMPSENSORRIGHT(_m->OilTempSensorRight)) << 0u) & 0xffu);
+	_d[4] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_COOLINGTEMPSENSORLEFT(_m->CoolingTempSensorLeft)) >> 8u) & 0xffu);
+	_d[5] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_COOLINGTEMPSENSORLEFT(_m->CoolingTempSensorLeft)) << 0u) & 0xffu);
+	_d[6] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_COOLINGTEMPSENSORRIGHT(_m->CoolingTempSensorRight)) >> 8u) & 0xffu);
+	_d[7] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_TEMP_SENSORS_COOLINGTEMPSENSORRIGHT(_m->CoolingTempSensorRight)) << 0u) & 0xffu);
+
+	return STATUS_OK;
+}
+
+// Pack signals from CANHUB_POTS
+int8_t Pack_CANHUB_POTS(const CANHUB_POTS_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 4u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 4u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_POTS_CANHUBPOT1(_m->CanhubPot1)) >> 4u) & 0xffu);
+	_d[1] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_POTS_CANHUBPOT1(_m->CanhubPot1)) << 4u) & 0xf0u);
+	_d[2] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_POTS_CANHUBPOT2(_m->CanhubPot2)) >> 4u) & 0xffu);
+	_d[3] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_POTS_CANHUBPOT2(_m->CanhubPot2)) << 4u) & 0xf0u);
+
+	return STATUS_OK;
+}
+
+// Pack signals from CANHUB_THERMOCOUPLES
+int8_t Pack_CANHUB_THERMOCOUPLES(const CANHUB_THERMOCOUPLES_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 8u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 8u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMOFL(_m->ThermoFL)) >> 8u) & 0xffu);
+	_d[1] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMOFL(_m->ThermoFL)) << 0u) & 0xffu);
+	_d[2] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMOFR(_m->ThermoFR)) >> 8u) & 0xffu);
+	_d[3] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMOFR(_m->ThermoFR)) << 0u) & 0xffu);
+	_d[4] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMORL(_m->ThermoRL)) >> 8u) & 0xffu);
+	_d[5] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMORL(_m->ThermoRL)) << 0u) & 0xffu);
+	_d[6] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMORR(_m->ThermoRR)) >> 8u) & 0xffu);
+	_d[7] |= (( ((uint16_t)PACK_SCALE_OFFSET_CANHUB_THERMOCOUPLES_THERMORR(_m->ThermoRR)) << 0u) & 0xffu);
+
+	return STATUS_OK;
+}
+
+// Pack signals from CANHUB_STRAIN_LINKS
+int8_t Pack_CANHUB_STRAIN_LINKS(const CANHUB_STRAIN_LINKS_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 8u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 8u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint16_t)(_m->LinkStrain1)) >> 4u) & 0xffu);
+	_d[1] |= (( ((uint16_t)(_m->LinkStrain1)) << 4u) & 0xf0u);
+	_d[2] |= (( ((uint16_t)(_m->LinkStrain2)) >> 4u) & 0xffu);
+	_d[3] |= (( ((uint16_t)(_m->LinkStrain2)) << 4u) & 0xf0u);
+	_d[4] |= (( ((uint16_t)(_m->LinkStrain3)) >> 4u) & 0xffu);
+	_d[5] |= (( ((uint16_t)(_m->LinkStrain3)) << 4u) & 0xf0u);
+	_d[6] |= (( ((uint16_t)(_m->LinkStrain4)) >> 4u) & 0xffu);
+	_d[7] |= (( ((uint16_t)(_m->LinkStrain4)) << 4u) & 0xf0u);
+
+	return STATUS_OK;
+}
+
+// Pack signals from CANHUB_STRAIN_STEERING
+int8_t Pack_CANHUB_STRAIN_STEERING(const CANHUB_STRAIN_STEERING_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 4u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 4u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint16_t)(_m->SteeringStrain1)) >> 4u) & 0xffu);
+	_d[1] |= (( ((uint16_t)(_m->SteeringStrain1)) << 4u) & 0xf0u);
+	_d[2] |= (( ((uint16_t)(_m->SteeringStrain2)) >> 4u) & 0xffu);
+	_d[3] |= (( ((uint16_t)(_m->SteeringStrain2)) << 4u) & 0xf0u);
 
 	return STATUS_OK;
 }

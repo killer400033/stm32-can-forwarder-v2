@@ -138,7 +138,7 @@ static void MX_TIM7_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
-
+volatile uint32_t dropped_packets = 0;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -1194,14 +1194,14 @@ void StartDefaultTask(void *argument)
   // Initialize UNIX time Thread
   initTime(&htim2);
 
+  // Begin application layer thread
+  initAppLayer();
+
   // Initialize and start FDCAN peripherals
   initCAN();
 
   // Initialize ADC Scanner with TIM7
   ADC_Scanner_Init(&htim7);
-
-  // Begin application layer thread
-  initAppLayer();
 
   CanFrame canDataReceived;
 

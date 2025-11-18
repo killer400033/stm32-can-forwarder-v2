@@ -1,0 +1,83 @@
+#ifndef SOCKET_H
+#define SOCKET_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#define MAC_ADDRESS {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+#define INTLEVEL 0x0000
+#define RETRY_TIME 1000 // Retry time in milliseconds
+#define RETRY_COUNT 5 // Retry count
+#define KEEP_ALIVE_TIMER 15 // Keep-alive timer in seconds (set to 0 to disable)
+
+typedef struct {
+    bool is_addr;
+    union {
+        uint8_t inline_buf[9];  // used when is_addr == false
+        const uint8_t *ptr;      // used when is_addr == true
+    } data;
+    uint16_t len;
+} command_t;
+
+typedef struct
+{
+    uint8_t MR;          // 0x0000 Mode
+
+    uint8_t GAR[4];      // 0x0001–0x0004 Gateway IP
+    uint8_t SUBR[4];     // 0x0005–0x0008 Subnet mask
+    uint8_t SHAR[6];     // 0x0009–0x000E Source MAC
+    uint8_t SIPR[4];     // 0x000F–0x0012 Source IP
+
+    uint8_t INTLEVEL[2]; // 0x0013–0x0014 Interrupt Low Level Timer (INTLEVEL0/1)
+    uint8_t IR;          // 0x0015 Interrupt
+    uint8_t IMR;         // 0x0016 Interrupt Mask
+    uint8_t SIR;         // 0x0017 Socket Interrupt
+    uint8_t SIMR;        // 0x0018 Socket Interrupt Mask
+
+    uint8_t RTR[2];      // 0x0019–0x001A Retry Time
+    uint8_t RCR;         // 0x001B Retry Count
+} common_regs_t;
+
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t  MR;              // 0x0000  Sn_MR
+    uint8_t  CR;              // 0x0001  Sn_CR
+    uint8_t  IR;              // 0x0002  Sn_IR
+    uint8_t  SR;              // 0x0003  Sn_SR
+
+    uint8_t  PORT[2];         // 0x0004–0x0005  Sn_PORT0/1 (big-endian)
+    uint8_t  DHAR[6];         // 0x0006–0x000B  Sn_DHAR0..5
+    uint8_t  DIPR[4];         // 0x000C–0x000F  Sn_DIPR0..3
+    uint8_t  DPORT[2];        // 0x0010–0x0011  Sn_DPORT0/1
+    uint8_t  MSSR[2];         // 0x0012–0x0013  Sn_MSSR0/1
+
+    uint8_t  _res_0014;       // 0x0014  Reserved
+
+    uint8_t  TOS;             // 0x0015  Sn_TOS
+    uint8_t  TTL;             // 0x0016  Sn_TTL
+
+    uint8_t  _res_0017_001D[7]; // 0x0017–0x001D  Reserved
+
+    uint8_t  RXBUF_SIZE;      // 0x001E  Sn_RXBUF_SIZE
+    uint8_t  TXBUF_SIZE;      // 0x001F  Sn_TXBUF_SIZE
+
+    uint8_t  TX_FSR[2];       // 0x0020–0x0021  Sn_TX_FSR0/1
+    uint8_t  TX_RD[2];        // 0x0022–0x0023  Sn_TX_RD0/1
+    uint8_t  TX_WR[2];        // 0x0024–0x0025  Sn_TX_WR0/1
+    uint8_t  RX_RSR[2];       // 0x0026–0x0027  Sn_RX_RSR0/1
+    uint8_t  RX_RD[2];        // 0x0028–0x0029  Sn_RX_RD0/1
+    uint8_t  RX_WR[2];        // 0x002A–0x002B  Sn_RX_WR0/1
+
+    uint8_t  IMR;             // 0x002C  Sn_IMR
+    uint8_t  FRAG[2];         // 0x002D–0x002E  Sn_FRAG0/1
+    uint8_t  KPALVTR;         // 0x002F  Sn_KPALVTR
+} socket_regs_t;
+#pragma pack(pop)
+
+typedef struct {
+    socket_regs_t registers;
+    uint8_t* data_buffer;
+    uint16_t data_buffer_size;
+    bool is_sending;
+    std::queue<BufferSegment> data_queue;
+} socket_t;
