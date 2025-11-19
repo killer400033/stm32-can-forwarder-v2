@@ -79,7 +79,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 
 	// Reusable CAN frame for all messages
 	CanFrame frame = {0};
-	frame.can_bus = CONTROL_BUS;
+	frame.can_bus = SENSOR_BUS;
 	frame.timestamp = getUnixTimeNanoseconds();
 	float sensor_voltage;
 
