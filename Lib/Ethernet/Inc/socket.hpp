@@ -10,6 +10,19 @@
 #define RETRY_COUNT 5 // Retry count
 #define KEEP_ALIVE_TIMER 15 // Keep-alive timer in seconds (set to 0 to disable)
 
+// Error codes
+#define SOCK_OK                  0   // Success
+#define SOCKERR_INVALID_PARAM   -1   // Invalid parameter (socket number, null pointer, etc.)
+#define SOCKERR_TIMEOUT         -2   // Operation timed out
+#define SOCKERR_QUEUE_FULL      -3   // Command Queue is full
+#define SOCKERR_INVALID_STATE   -4   // Socket in invalid state
+#define SOCKERR_TCP_TIMEOUT     -5   // TCP timeout
+
+typedef enum {
+    SOCKET_PROTOCOL_TCP = Sn_MR_TCP,
+    SOCKET_PROTOCOL_UDP = Sn_MR_UDP
+} socket_protocol_t;
+
 typedef struct {
     bool is_addr;
     union {
@@ -78,6 +91,48 @@ typedef struct {
     socket_regs_t registers;
     uint8_t* data_buffer;
     uint16_t data_buffer_size;
-    bool is_sending;
     std::queue<BufferSegment> data_queue;
+    bool is_sending;
 } socket_t;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief Initialize W5500 chip with network configuration
+ * @param ip_address IP address (4 bytes)
+ * @param subnet_mask Subnet mask (4 bytes)
+ * @param gateway_ip Gateway IP address (4 bytes)
+ * @param rx_buf_sizes RX buffer sizes for all 8 sockets (in KB)
+ * @param tx_buf_sizes TX buffer sizes for all 8 sockets (in KB)
+ * @return SOCK_OK (0) on success, negative error code otherwise
+ */
+int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip, 
+                const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes);
+
+/**
+ * @brief Initialize a socket with protocol and port
+ * @param sn Socket number (0-7)
+ * @param protocol TCP or UDP protocol
+ * @param port Source port number
+ * @param data_buffer Pointer to data buffer for this socket (optional)
+ * @param data_buffer_size Size of data buffer
+ * @return SOCK_OK (0) on success, negative error code otherwise
+ */
+int socket(uint8_t sn, socket_protocol_t protocol, uint16_t port, uint8_t* data_buffer=NULL, uint16_t data_buffer_size=0)
+
+/**
+ * @brief Connect to a destination (sets destination IP and port)
+ * @param sn Socket number (0-7)
+ * @param addr Destination IP address (4 bytes)
+ * @param port Destination port number
+ * @return SOCK_OK (0) on success, negative error code otherwise
+ */
+int connect(uint8_t sn, uint8_t* addr, uint16_t port);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
