@@ -6,21 +6,28 @@
 #include "cmsis_os.h"
 #include "main.h"
 
-extern SPI_HandleTypeDef hspi1;
+static SPI_HandleTypeDef* wiznet_hspi = NULL;
 
 static Queue<command_t, COMMAND_QUEUE_SIZE> command_queue;
+command_t running_cmd = {0};
 
-socket_t sockets[_WIZCHIP_SOCK_NUM_];
-common_regs_t common_regs;
+socket_t sockets[_WIZCHIP_SOCK_NUM_] = {0};
+common_regs_t common_regs = {0};
 
-static bool enqueueSetRegInline(uint32_t addr, const uint8_t* data, uint8_t len);
-static bool enqueueGetRegInline(uint32_t addr, uint8_t* buffer, uint8_t len);
+static bool enqueueSetReg(uint32_t addr, const uint8_t* data, uint8_t len);
+static bool enqueueGetReg(uint32_t addr, uint8_t* buffer, uint8_t len);
 static int pollRegNoIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool inv=false, uint16_t timeout=1000)
 static int pollRegWithIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool inv=false);
 static uint16_t getDataBufferIndex(socket_t* socket, uint16_t data_length);
 
 int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
-                const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes) {
+                const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes, SPI_HandleTypeDef* hspi) {
+    if (hspi == NULL) {
+        return SOCKERR_INVALID_PARAM;
+    }
+
+    wiznet_hspi = hspi;
+
     const uint8_t mac_addr[] = MAC_ADDRESS;
     const uint16_t intlevel = INTLEVEL;
     const uint16_t rtr = RETRY_TIME * 10;
@@ -30,7 +37,7 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
 
     // Write reset command
     common_regs.MR = MR_RST;
-    if (!enqueueSetRegInline(MR, &common_regs.MR, 1)) {
+    if (!enqueueSetReg(MR, &common_regs.MR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
 
@@ -42,45 +49,45 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
     
     // Write Network Information
     common_regs.GAR = gateway_ip;
-    if (!enqueueSetRegInline(GAR, common_regs.GAR, 4)) {
+    if (!enqueueSetReg(GAR, common_regs.GAR, 4)) {
         return SOCKERR_QUEUE_FULL;
     }
     common_regs.SUBR = subnet_mask;
-    if (!enqueueSetRegInline(SUBR, common_regs.SUBR, 4)) {
+    if (!enqueueSetReg(SUBR, common_regs.SUBR, 4)) {
         return SOCKERR_QUEUE_FULL;
     }
     common_regs.SHAR = mac_addr;
-    if (!enqueueSetRegInline(SHAR, common_regs.SHAR, 6)) {
+    if (!enqueueSetReg(SHAR, common_regs.SHAR, 6)) {
         return SOCKERR_QUEUE_FULL;
     }
     common_regs.SIPR = ip_address;
-    if (!enqueueSetRegInline(SIPR, common_regs.SIPR, 4)) {
+    if (!enqueueSetReg(SIPR, common_regs.SIPR, 4)) {
         return SOCKERR_QUEUE_FULL;
     }
     
     // Write INTLEVEL
     common_regs.INTLEVEL[0] = (intlevel >> 8) & 0xFF;
     common_regs.INTLEVEL[1] = intlevel & 0xFF;
-    if (!enqueueSetRegInline(INTLEVEL, common_regs.INTLEVEL, 2)) {
+    if (!enqueueSetReg(INTLEVEL, common_regs.INTLEVEL, 2)) {
         return SOCKERR_QUEUE_FULL;
     }
 
     // Enable interrupts for all sockets
     common_regs.SIMR = 0xFF;
-    if (!enqueueSetRegInline(SIMR, &common_regs.SIMR, 1)) {
+    if (!enqueueSetReg(SIMR, &common_regs.SIMR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
     
     // Write RTR
     common_regs.RTR[0] = (rtr >> 8) & 0xFF;
     common_regs.RTR[1] = rtr & 0xFF;
-    if (!enqueueSetRegInline(W5500_RTR, common_regs.RTR, 2)) {
+    if (!enqueueSetReg(W5500_RTR, common_regs.RTR, 2)) {
         return SOCKERR_QUEUE_FULL;
     }
     
     // Write RCR
     common_regs.RCR = rcr;
-    if (!enqueueSetRegInline(W5500_RCR, common_regs.RCR, 1)) {
+    if (!enqueueSetReg(W5500_RCR, common_regs.RCR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
 
@@ -88,13 +95,13 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
     for (uint8_t i = 0; i < _WIZCHIP_SOCK_NUM_; i++) {
         // Write Sn_RXBUF_SIZE (RX Buffer Size) - 1 byte
         sockets[i].registers.RXBUF_SIZE = rx_buf_sizes[i];
-        if (!enqueueSetRegInline(Sn_RXBUF_SIZE(i), &sockets[i].registers.RXBUF_SIZE, 1)) {
+        if (!enqueueSetReg(Sn_RXBUF_SIZE(i), &sockets[i].registers.RXBUF_SIZE, 1)) {
             return SOCKERR_QUEUE_FULL;
         }
         
         // Write Sn_TXBUF_SIZE (TX Buffer Size) - 1 byte
         sockets[i].registers.TXBUF_SIZE = tx_buf_sizes[i];
-        if (!enqueueSetRegInline(Sn_TXBUF_SIZE(i), &sockets[i].registers.TXBUF_SIZE, 1)) {
+        if (!enqueueSetReg(Sn_TXBUF_SIZE(i), &sockets[i].registers.TXBUF_SIZE, 1)) {
             return SOCKERR_QUEUE_FULL;
         }
     }
@@ -103,10 +110,13 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
 }
 
 
-int socket(uint8_t sn, socket_protocol_t protocol, uint16_t port, uint8_t* data_buffer=NULL, uint16_t data_buffer_size=0) {
+int socket(uint8_t sn, socket_protocol_t protocol, uint16_t port, uint8_t* data_buffer=NULL, uint16_t data_buffer_size=0, socket_rcv_callback_t rcv_callback=NULL) {
     if (sn >= _WIZCHIP_SOCK_NUM_) {
         return SOCKERR_INVALID_PARAM;
     }
+
+    // Store callback
+    sockets[sn].rcv_callback = rcv_callback;
     
     // Store buffer configuration
     sockets[sn].data_buffer = data_buffer;
@@ -117,26 +127,26 @@ int socket(uint8_t sn, socket_protocol_t protocol, uint16_t port, uint8_t* data_
     if (protocol == SOCKET_PROTOCOL_TCP) {
         sockets[sn].registers.MR |= Sn_MR_ND; // No Delayed ACK(TCP)
     }
-    if (!enqueueSetRegInline(Sn_MR(sn), &sockets[sn].registers.MR, 1)) {
+    if (!enqueueSetReg(Sn_MR(sn), &sockets[sn].registers.MR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
     
     // Write Sn_PORT (Source Port) - 2 bytes, big-endian
     sockets[sn].registers.PORT[0] = (port >> 8) & 0xFF;
     sockets[sn].registers.PORT[1] = port & 0xFF;
-    if (!enqueueSetRegInline(Sn_PORT(sn), sockets[sn].registers.PORT, 2)) {
+    if (!enqueueSetReg(Sn_PORT(sn), sockets[sn].registers.PORT, 2)) {
         return SOCKERR_QUEUE_FULL;
     }
 
     // Write Sn_IMR (Interrupt Mask Register) - 0xFF
     sockets[sn].registers.IMR = 0xFF;
-    if (!enqueueSetRegInline(Sn_IMR(sn), &sockets[sn].registers.IMR, 1)) {
+    if (!enqueueSetReg(Sn_IMR(sn), &sockets[sn].registers.IMR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
 
     // Write Sn_CR (Command Register) - OPEN
     sockets[sn].registers.CR = Sn_CR_OPEN;
-    if (!enqueueSetRegInline(Sn_CR(sn), &sockets[sn].registers.CR, 1)) {
+    if (!enqueueSetReg(Sn_CR(sn), &sockets[sn].registers.CR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
 
@@ -171,7 +181,7 @@ int close(uint8_t sn) {
     
     // Write Sn_CR (Command Register) - CLOSE
     sockets[sn].registers.CR = Sn_CR_CLOSE;
-    if (!enqueueSetRegInline(Sn_CR(sn), &sockets[sn].registers.CR, 1)) {
+    if (!enqueueSetReg(Sn_CR(sn), &sockets[sn].registers.CR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
 
@@ -199,7 +209,7 @@ int connect(uint8_t sn, uint8_t* addr, uint16_t port) {
     }
 
     // Write Sn_DIPR (Destination IP Address) - 4 bytes
-    if (!enqueueSetRegInline(Sn_DIPR(sn), addr, 4)) {
+    if (!enqueueSetReg(Sn_DIPR(sn), addr, 4)) {
         return SOCKERR_QUEUE_FULL;
     }
     
@@ -207,13 +217,13 @@ int connect(uint8_t sn, uint8_t* addr, uint16_t port) {
     uint8_t dport_bytes[2];
     dport_bytes[0] = (port >> 8) & 0xFF;
     dport_bytes[1] = port & 0xFF;
-    if (!enqueueSetRegInline(Sn_DPORT(sn), dport_bytes, 2)) {
+    if (!enqueueSetReg(Sn_DPORT(sn), dport_bytes, 2)) {
         return SOCKERR_QUEUE_FULL;
     }
 
     // Write Sn_CR (Command Register) - CONNECT
     sockets[sn].registers.CR = Sn_CR_CONNECT;
-    if (!enqueueSetRegInline(Sn_CR(sn), &sockets[sn].registers.CR, 1)) {
+    if (!enqueueSetReg(Sn_CR(sn), &sockets[sn].registers.CR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
 
@@ -248,7 +258,7 @@ int disconnect(uint8_t sn) {
     
     // Write Sn_CR (Command Register) - DISCONNECT
     sockets[sn].registers.CR = Sn_CR_DISCONNECT;
-    if (!enqueueSetRegInline(Sn_CR(sn), &sockets[sn].registers.CR, 1)) {
+    if (!enqueueSetReg(Sn_CR(sn), &sockets[sn].registers.CR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
 
@@ -347,30 +357,33 @@ int sendto(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t *addr, uint16_t port
     return SOCK_OK;
 }
 
-static bool enqueueSetRegInline(uint32_t addr, const uint8_t* data, uint8_t len) {
-    if (len > 6) {
+// **DO NOT CALL FROM INTERRUPT CONTEXT!**
+static bool enqueueSetReg(uint32_t addr, const uint8_t* data, uint8_t len) {
+    if (len > COMMAND_BUFFER_SIZE - 3) {
         return false;
     }
 
     command_t cmd;
     // Add write bit and VDM operation mode
     addr |= (_W5500_SPI_WRITE_ | _W5500_SPI_VDM_OP_);
-    
-    cmd.is_addr = false;
-    cmd.data.inline_buf[0] = (addr >> 16) & 0xFF;
-    cmd.data.inline_buf[1] = (addr >> 8) & 0xFF;
-    cmd.data.inline_buf[2] = addr & 0xFF;
-    memcpy(&cmd.data.inline_buf[3], data, len);
+
+    cmd.cmd_type = WRITE_REG;
+    cmd.inline_buf[0] = (addr >> 16) & 0xFF;
+    cmd.inline_buf[1] = (addr >> 8) & 0xFF;
+    cmd.inline_buf[2] = addr & 0xFF;
+    memcpy(&cmd.inline_buf[3], data, len);
     cmd.len = 3 + len;
     
-    if (!queuePushBack(&command_queue, cmd)) {
-        return false;
-    }
-    return true;
+    taskENTER_CRITICAL();
+    bool success = queuePushBack(&command_queue, cmd);
+    taskEXIT_CRITICAL();
+
+    return success;
 }
 
-static bool enqueueGetRegInline(uint32_t addr, uint8_t* buffer, uint8_t len) {
-    if (len > 6) {
+// **DO NOT CALL FROM INTERRUPT CONTEXT!**
+static bool enqueueGetReg(uint32_t addr, uint8_t* buffer, uint8_t len) {
+    if (len > COMMAND_BUFFER_SIZE - 3) {
         return false;
     }
 
@@ -378,16 +391,152 @@ static bool enqueueGetRegInline(uint32_t addr, uint8_t* buffer, uint8_t len) {
     // Add read bit and VDM operation mode
     addr |= (_W5500_SPI_READ_ | _W5500_SPI_VDM_OP_);
     
-    cmd.is_addr = false;
-    cmd.data.inline_buf[0] = (addr >> 16) & 0xFF;
-    cmd.data.inline_buf[1] = (addr >> 8) & 0xFF;
-    cmd.data.inline_buf[2] = addr & 0xFF;
+    cmd.cmd_type = READ_REG;
+    cmd.inline_buf[0] = (addr >> 16) & 0xFF;
+    cmd.inline_buf[1] = (addr >> 8) & 0xFF;
+    cmd.inline_buf[2] = addr & 0xFF;
     cmd.len = 3 + len;
+    cmd.ptr = buffer;
     
-    if (!queuePushBack(&command_queue, cmd)) {
-        return false;
+    taskENTER_CRITICAL();
+    bool success = queuePushBack(&command_queue, cmd)
+    taskEXIT_CRITICAL();
+
+    return success;
+}
+
+/**
+ * DMA transmit/receive complete callback
+ * Called when a DMA transmit/receive operation is completed
+ */
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if (hspi->Instance == wiznet_hspi->Instance) {
+        // Process the received data first
+        dmaRXCompleteCallback();
+        
+        // Then handle the TX completion (queue management)
+        dmaTXCompleteCallback();
     }
-    return true;
+}
+
+/**
+ * DMA transmit complete callback
+ * Called when a DMA transmission is completed
+ */
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if (hspi->Instance == wiznet_hspi->Instance) {
+        dmaTXCompleteCallback();
+    }
+}
+
+void dmaTXCompleteCallback() {
+    // Ensure only we access queue
+    uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+
+    bool success = queuePopFront(&command_queue, &running_cmd);
+    
+    taskEXIT_CRITICAL_FROM_ISR(isrm);
+
+    if (!success) return;
+
+    switch (running_cmd.cmd_type) {
+        case WRITE_REG:
+            HAL_SPI_Transmit_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.len);
+            break;
+        case WRITE_BUF:
+            HAL_SPI_Transmit_DMA(wiznet_hspi, running_cmd.ptr, running_cmd.len);
+            break;
+        case READ_REG:
+            HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            break;
+        case READ_BUF:
+            HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.ptr, running_cmd.ptr, running_cmd.len);
+            break;
+        case READ_SIR:
+            HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            break;
+        default:
+            break;
+    }
+}
+
+void dmaRXCompleteCallback() {
+    switch (running_cmd.cmd_type) {
+        case READ_REG:
+            memcpy(running_cmd.ptr, &(running_cmd.inline_buf[3]), running_cmd.len - 3);
+            break;
+        case READ_BUF:
+            if (sockets[running_cmd.sn].rcv_callback != NULL) {
+                sockets[running_cmd.sn].rcv_callback(running_cmd.len - 3);
+            }
+            break;
+        // Called when interrupt is generated, and we read SIR register
+        case READ_SIR:
+            memcpy(running_cmd.ptr, &(running_cmd.inline_buf[3]), running_cmd.len - 3);
+            command_t cmd = {.cmd_type = READ_SOC, .len = sizeof(sockets[0].registers)};
+            for (uint8_t i = 0; i < _WIZCHIP_SOCK_NUM_; i++) {
+                if ((common_regs.SIR >> i) & 0x01) {
+                    cmd.sn = i;
+                    cmd.ptr = (uint8_t*)&(sockets[i].registers);
+                    
+                    // Set the first 3 bytes of the socket registers struct to the W5500 SPI address/command
+                    uint32_t addr = 0x0000;
+                    uint8_t block = WIZCHIP_SREG_BLOCK(i);
+                    
+                    sockets[i].registers._spi_addr_high = (addr >> 8) & 0xFF;
+                    sockets[i].registers._spi_addr_low = addr & 0xFF;
+                    sockets[i].registers._spi_control = (block << 3) | _W5500_SPI_READ_;
+                    
+                    uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+                    queuePushFront(&command_queue, cmd);
+                    taskEXIT_CRITICAL_FROM_ISR(isrm);
+                }
+            }
+            break;
+        // Called when interrupt is generated, and we read socket regs for sockets that have interrupts
+        case READ_SOC:
+            if (sockets[running_cmd.sn].registers.IR & Sn_IR_CON) {
+
+            }
+
+            if (sockets[running_cmd.sn].registers.IR & Sn_IR_DISCON) {
+
+            }
+
+            if (sockets[running_cmd.sn].registers.IR & Sn_IR_RECV) {
+
+            }
+
+            if (sockets[running_cmd.sn].registers.IR & Sn_IR_TIMEOUT) {
+
+            }
+
+            if (sockets[running_cmd.sn].registers.IR & Sn_IR_SENDOK) {
+
+            }
+
+            // Clear the interrupt register by writing the same value back
+            command_t cmd;
+            uint32_t addr = Sn_IR(running_cmd.sn);
+            addr |= (_W5500_SPI_WRITE_ | _W5500_SPI_VDM_OP_);
+            
+            cmd.cmd_type = WRITE_REG;
+            cmd.inline_buf[0] = (addr >> 16) & 0xFF;
+            cmd.inline_buf[1] = (addr >> 8) & 0xFF;
+            cmd.inline_buf[2] = addr & 0xFF;
+            cmd.inline_buf[3] = sockets[running_cmd.sn].registers.IR;
+            cmd.len = 4;
+            
+            uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+            queuePushFront(&command_queue, cmd);
+            taskEXIT_CRITICAL_FROM_ISR(isrm);
+            
+            break;
+        default:
+            break;
+    }
 }
 
 /**
@@ -398,7 +547,7 @@ static bool enqueueGetRegInline(uint32_t addr, uint8_t* buffer, uint8_t len) {
 static int pollRegNoIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool inv=false, uint16_t timeout=2000) {
     uint16_t start_time = osKernelGetTickCount();
     while (osKernelGetTickCount() - start_time < timeout && (*reg != val) ^ inv) {
-        if (!enqueueGetRegInline(addr, reg, 1)) {
+        if (!enqueueGetReg(addr, reg, 1)) {
             return SOCKERR_QUEUE_FULL;
         }
         osDelay(100);
@@ -426,6 +575,12 @@ static int pollRegWithIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool i
     return SOCKERR_TIMEOUT;
 }
 
+/**
+ * @brief Get the index of the data buffer where the next data should be written
+ * @param socket The socket to get the index for
+ * @param data_length The length of the data to write
+ * @return The index of the data buffer where the next data should be written, -1 if there is not enough space
+ */
 static uint16_t getDataBufferIndex(socket_t* socket, uint16_t data_length)
 {
     if (queueIsEmpty(&socket->data_queue)) {

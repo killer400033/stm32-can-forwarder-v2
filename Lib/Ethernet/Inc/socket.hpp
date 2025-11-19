@@ -8,11 +8,12 @@
 #define COMMAND_QUEUE_SIZE 100
 #define SOCKET_QUEUE_SIZE 15
 
-#define MAC_ADDRESS {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+#define MAC_ADDRESS { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED }
 #define INTLEVEL 0x0000
 #define RETRY_TIME 1000 // Retry time in milliseconds
 #define RETRY_COUNT 5 // Retry count
 #define KEEP_ALIVE_TIMER 15 // Keep-alive timer in seconds (set to 0 to disable)
+#define COMMAND_BUFFER_SIZE 10
 
 // Error codes
 #define SOCK_OK                  0   // Success
@@ -23,17 +24,27 @@
 #define SOCKERR_TCP_TIMEOUT     -5   // TCP timeout
 #define SOCKERR_BUFFER_FULL     -6   // Buffer is full
 
+typedef void (*socket_rcv_callback_t)(uint16_t len);
+
 typedef enum {
     SOCKET_PROTOCOL_TCP = Sn_MR_TCP,
     SOCKET_PROTOCOL_UDP = Sn_MR_UDP
 } socket_protocol_t;
 
+typedef enum {
+    WRITE_REG = 0, // Write max 4 bytes to WIZNET
+    WRITE_BUF = 1, // Write buffer to WIZNET
+    READ_REG = 2, // Read max 4 bytes from WIZNET
+    READ_BUF = 3, // Read buffer from WIZNET
+    READ_SIR = 4, // Read SIR register from WIZNET
+    READ_SOC = 5, // Read full socket registers from WIZNET
+} command_type_t;
+
 typedef struct {
-    bool is_addr;
-    union {
-        uint8_t inline_buf[9];  // used when is_addr == false
-        const uint8_t *ptr;      // used when is_addr == true
-    } data;
+    command_type_t cmd_type;
+    uint8_t sn;
+    uint8_t inline_buf[COMMAND_BUFFER_SIZE];
+    const uint8_t *ptr;
     uint16_t len;
 } command_t;
 
@@ -58,6 +69,12 @@ typedef struct
 
 #pragma pack(push, 1)
 typedef struct {
+    // SPI header bytes (for TransmitReceive operations)
+    uint8_t  _spi_addr_high;  // Address high byte
+    uint8_t  _spi_addr_low;   // Address low byte  
+    uint8_t  _spi_control;    // Control byte (block select + R/W)
+    
+    // W5500 Socket Register Map (starts at 0x0000 in socket register block)
     uint8_t  MR;              // 0x0000  Sn_MR
     uint8_t  CR;              // 0x0001  Sn_CR
     uint8_t  IR;              // 0x0002  Sn_IR
@@ -106,6 +123,7 @@ typedef struct {
     uint8_t* data_buffer;
     uint16_t data_buffer_size;
     Queue<BufferSegment, SOCKET_QUEUE_SIZE> data_queue;
+    socket_rcv_callback_t rcv_callback;
     bool is_sending;
 } socket_t;
 

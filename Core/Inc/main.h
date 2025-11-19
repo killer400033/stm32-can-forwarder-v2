@@ -71,6 +71,9 @@ void Error_Handler_Debug(const char* file, int line, const char* func);
 #define SDMMC_CARD_DETECT_GPIO_Port GPIOA
 #define SPI1_CS_Pin GPIO_PIN_5
 #define SPI1_CS_GPIO_Port GPIOD
+#define WIZNET_INT_Pin GPIO_PIN_6
+#define WIZNET_INT_GPIO_Port GPIOD
+#define WIZNET_INT_EXTI_IRQn EXTI9_5_IRQn
 
 /* USER CODE BEGIN Private defines */
 
