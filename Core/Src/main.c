@@ -139,6 +139,8 @@ void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 volatile uint32_t dropped_packets = 0;
+volatile uint32_t can_send_errors = 0;
+volatile uint32_t can_read_errors = 0;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/

@@ -47,6 +47,8 @@ extern "C" {
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
 extern volatile uint32_t dropped_packets;
+extern volatile uint32_t can_send_errors;
+extern volatile uint32_t can_read_errors;
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/

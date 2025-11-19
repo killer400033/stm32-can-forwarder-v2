@@ -150,7 +150,7 @@ static void pushToWSandCAN(CanFrame *frame, uint8_t length)
     dropped_packets++;
   }
   if (sendCanFrame(frame->can_id, frame->can_bus, frame->can_data, length) != 0) {
-   log_msg(LL_ERR, "Failed to send CAN ID %d through bus %d", frame->can_id, frame->can_bus);
+    can_send_errors++;
   }
 }
 

@@ -62,7 +62,7 @@ void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 
 			fifoFillLevel--;
 		} else {
-			log_msg(LL_ERR, "Failed to read message from CAN %d FIFO", canBusId);
+			can_read_errors++;
 			break;
 		}
 	}

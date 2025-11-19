@@ -1,13 +1,14 @@
 #include <queue>
 #include <cstring>
 #include "socket.hpp"
+#include "queue.hpp"
 #include "w5500.h"
 #include "cmsis_os.h"
 #include "main.h"
 
 extern SPI_HandleTypeDef hspi1;
 
-static std::queue<command_t> command_queue;
+static Queue<command_t, COMMAND_QUEUE_SIZE> command_queue;
 
 socket_t sockets[_WIZCHIP_SOCK_NUM_];
 common_regs_t common_regs;
@@ -16,6 +17,7 @@ static bool enqueueSetRegInline(uint32_t addr, const uint8_t* data, uint8_t len)
 static bool enqueueGetRegInline(uint32_t addr, uint8_t* buffer, uint8_t len);
 static int pollRegNoIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool inv=false, uint16_t timeout=1000)
 static int pollRegWithIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool inv=false);
+static uint16_t getDataBufferIndex(socket_t* socket, uint16_t data_length);
 
 int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
                 const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes) {
@@ -24,9 +26,7 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
     const uint16_t rtr = RETRY_TIME * 10;
     const uint8_t rcr = RETRY_COUNT;
 
-    while (command_queue.size() > 0) {
-        command_queue.pop();
-    }
+    queueInit(&command_queue);
 
     // Write reset command
     common_regs.MR = MR_RST;
@@ -271,6 +271,7 @@ int disconnect(uint8_t sn) {
     return SOCKERR_TCP_TIMEOUT;
 }
 
+// **DO NOT CALL FROM INTERRUPT CONTEXT!**
 int send(uint8_t sn, uint8_t* buf, uint16_t len) {
     if (sn >= _WIZCHIP_SOCK_NUM_ || buf == NULL || len == 0) {
         return SOCKERR_INVALID_PARAM;
@@ -280,7 +281,70 @@ int send(uint8_t sn, uint8_t* buf, uint16_t len) {
         return SOCKERR_INVALID_STATE;
     }
 
-    // Enqueue to tx buffer
+    // Critical section
+    // Ensure queue is not modified or DMA write isn't attempted until we finish
+    taskENTER_CRITICAL();
+
+    uint16_t write_index = getDataBufferIndex(&sockets[sn], len + 3);
+    if (write_index == -1) {
+        return SOCKERR_BUFFER_FULL;
+    }
+
+    // Add segment to queue
+    BufferSegment new_segment;
+    new_segment.start_index = write_index;
+    new_segment.end_index = write_index + len + 3;
+    bool success = queuePushBack(&sockets[sn].data_queue, new_segment);
+
+    if (success) {
+        memcpy(sockets[sn].data_buffer + write_index + 3, buf, len);
+    }
+
+    taskEXIT_CRITICAL();
+
+    if (!success) {
+        return SOCKERR_QUEUE_FULL;
+    }
+    return SOCK_OK;
+}
+
+// **DO NOT CALL FROM INTERRUPT CONTEXT!**
+int sendto(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t *addr, uint16_t port) {
+    if (sn >= _WIZCHIP_SOCK_NUM_ || buf == NULL || len == 0 || addr == NULL || port == 0) {
+        return SOCKERR_INVALID_PARAM;
+    }
+
+    if (sockets[sn].registers.SR != SOCK_UDP) {
+        return SOCKERR_INVALID_STATE;
+    }
+    
+    // Critical section
+    // Ensure queue is not modified or DMA write isn't attempted until we finish
+    taskENTER_CRITICAL();
+
+    uint16_t write_index = getDataBufferIndex(&sockets[sn], len + 3);
+    if (write_index == -1) {
+        return SOCKERR_BUFFER_FULL;
+    }
+
+    // Add segment to queue
+    BufferSegment new_segment;
+    new_segment.start_index = write_index;
+    new_segment.end_index = write_index + len + 3;
+    memcpy(new_segment.addr, addr, 4);
+    new_segment.port = port;
+    bool success = queuePushBack(&sockets[sn].data_queue, new_segment);
+
+    if (success) {
+        memcpy(sockets[sn].data_buffer + write_index + 3, buf, len);
+    }
+
+    taskEXIT_CRITICAL();
+    
+    if (!success) {
+        return SOCKERR_QUEUE_FULL;
+    }
+    return SOCK_OK;
 }
 
 static bool enqueueSetRegInline(uint32_t addr, const uint8_t* data, uint8_t len) {
@@ -299,7 +363,9 @@ static bool enqueueSetRegInline(uint32_t addr, const uint8_t* data, uint8_t len)
     memcpy(&cmd.data.inline_buf[3], data, len);
     cmd.len = 3 + len;
     
-    command_queue.push(cmd);
+    if (!queuePushBack(&command_queue, cmd)) {
+        return false;
+    }
     return true;
 }
 
@@ -318,7 +384,9 @@ static bool enqueueGetRegInline(uint32_t addr, uint8_t* buffer, uint8_t len) {
     cmd.data.inline_buf[2] = addr & 0xFF;
     cmd.len = 3 + len;
     
-    command_queue.push(cmd);
+    if (!queuePushBack(&command_queue, cmd)) {
+        return false;
+    }
     return true;
 }
 
@@ -356,4 +424,41 @@ static int pollRegWithIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool i
         return SOCK_OK;
     }
     return SOCKERR_TIMEOUT;
+}
+
+static uint16_t getDataBufferIndex(socket_t* socket, uint16_t data_length)
+{
+    if (queueIsEmpty(&socket->data_queue)) {
+        // Queue is empty - start at beginning if data fits
+        return (data_length <= socket->data_buffer_size) ? 0 : -1;
+    }
+    
+    // Get start and end positions from queue
+    uint8_t* queue_start = queueFront(&socket->data_queue).start_index;
+    uint8_t* queue_end = queueBack(&socket->data_queue).end_index;
+    
+    if (queue_end >= queue_start) {
+        // End is after beginning: check space at end first, then at beginning
+        uint16_t space_at_end = socket->data_buffer_size - queue_end;
+        uint16_t space_at_beginning = queue_start;
+        
+        if (data_length <= space_at_end) {
+            // Use space at end
+            return queue_end;
+        } else if (data_length <= space_at_beginning) {
+            // Use space at beginning (wraparound)
+            return 0;
+        } else {
+            // Not enough space
+            return -1;
+        }
+    } else {
+        // End is before beginning (already wrapped): only space between end and start
+        if (data_length <= queue_start - queue_end) {
+            return queue_end;
+        } else {
+            // Not enough space
+            return -1;
+        }
+    }
 }

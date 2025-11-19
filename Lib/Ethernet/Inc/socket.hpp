@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "queue.hpp"
+
+#define COMMAND_QUEUE_SIZE 100
+#define SOCKET_QUEUE_SIZE 15
 
 #define MAC_ADDRESS {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 #define INTLEVEL 0x0000
@@ -17,6 +21,7 @@
 #define SOCKERR_QUEUE_FULL      -3   // Command Queue is full
 #define SOCKERR_INVALID_STATE   -4   // Socket in invalid state
 #define SOCKERR_TCP_TIMEOUT     -5   // TCP timeout
+#define SOCKERR_BUFFER_FULL     -6   // Buffer is full
 
 typedef enum {
     SOCKET_PROTOCOL_TCP = Sn_MR_TCP,
@@ -87,11 +92,20 @@ typedef struct {
 } socket_regs_t;
 #pragma pack(pop)
 
+struct BufferSegment {
+    uint16_t start_index;  // Start index of data segment in buffer
+    uint16_t end_index;    // End index of data segment in buffer (exclusive)
+
+    // Used for UDP packets
+    uint8_t addr[4];         // Destination IP address
+    uint16_t port;         // Destination port number
+};
+
 typedef struct {
     socket_regs_t registers;
     uint8_t* data_buffer;
     uint16_t data_buffer_size;
-    std::queue<BufferSegment> data_queue;
+    Queue<BufferSegment, SOCKET_QUEUE_SIZE> data_queue;
     bool is_sending;
 } socket_t;
 
@@ -120,16 +134,50 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
  * @param data_buffer_size Size of data buffer
  * @return SOCK_OK (0) on success, negative error code otherwise
  */
-int socket(uint8_t sn, socket_protocol_t protocol, uint16_t port, uint8_t* data_buffer=NULL, uint16_t data_buffer_size=0)
+int socket(uint8_t sn, socket_protocol_t protocol, uint16_t port, uint8_t* data_buffer=NULL, uint16_t data_buffer_size=0);
 
 /**
- * @brief Connect to a destination (sets destination IP and port)
+ * @brief Connect to a destination (TCP only - sets destination IP and port, then initiates connection)
  * @param sn Socket number (0-7)
  * @param addr Destination IP address (4 bytes)
  * @param port Destination port number
  * @return SOCK_OK (0) on success, negative error code otherwise
  */
 int connect(uint8_t sn, uint8_t* addr, uint16_t port);
+
+/**
+ * @brief Close a socket
+ * @param sn Socket number (0-7)
+ * @return SOCK_OK (0) on success, negative error code otherwise
+ */
+int close(uint8_t sn);
+
+/**
+ * @brief Disconnect a TCP socket
+ * @param sn Socket number (0-7)
+ * @return SOCK_OK (0) on success, negative error code otherwise
+ */
+int disconnect(uint8_t sn);
+
+/**
+ * @brief Send data on a TCP socket
+ * @param sn Socket number (0-7)
+ * @param buf Data buffer to send
+ * @param len Length of data to send
+ * @return SOCK_OK (0) on success, negative error code otherwise
+ */
+int send(uint8_t sn, uint8_t* buf, uint16_t len);
+
+/**
+ * @brief Send data on a UDP socket to a specific destination
+ * @param sn Socket number (0-7)
+ * @param buf Data buffer to send
+ * @param len Length of data to send
+ * @param addr Destination IP address (4 bytes)
+ * @param port Destination port number
+ * @return SOCK_OK (0) on success, negative error code otherwise
+ */
+int sendto(uint8_t sn, uint8_t* buf, uint16_t len, uint8_t* addr, uint16_t port);
 
 #ifdef __cplusplus
 }
