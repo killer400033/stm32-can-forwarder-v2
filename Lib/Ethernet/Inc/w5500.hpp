@@ -16,6 +16,10 @@
 #define RETRY_COUNT 5 // Retry count
 #define KEEP_ALIVE_TIMER 15 // Keep-alive timer in seconds (set to 0 to disable)
 
+// Helper macros to convert 2-byte big-endian arrays to uint16_t
+#define GET_U16(arr) ((uint16_t)((arr)[0] << 8) | (arr)[1])
+#define SET_U16(arr, val) do { (arr)[0] = ((val) >> 8) & 0xFF; (arr)[1] = (val) & 0xFF; } while(0)
+
 typedef enum {
     SOCKET_DISCON_REQ_CALLBACK = 0,
     SOCKET_DISCON_SUC_CALLBACK = 1,
@@ -37,13 +41,14 @@ typedef enum {
     READ_BUF = 3, // Read buffer from WIZNET
     READ_SIR = 4, // Read SIR register from WIZNET
     READ_SOC = 5, // Read full socket registers from WIZNET
+    CHECK_RCV = 6, // Read RX_RSR and RX_RD and enqueue RECV command if there is data to receive
 } command_type_t;
 
 typedef struct {
     command_type_t cmd_type;
     uint8_t sn;
     uint8_t inline_buf[COMMAND_BUFFER_SIZE];
-    const uint8_t *ptr;
+    uint8_t *ptr;
     uint16_t len;
 } command_t;
 
@@ -118,7 +123,6 @@ typedef struct {
 } buffer_segment_t;
 
 typedef struct socket_t {
-    uint8_t sn;               // Socket number
     socket_regs_t registers;  // Socket registers
     
     uint8_t* tx_buf;
@@ -127,11 +131,11 @@ typedef struct socket_t {
 
     uint8_t* rx_buf;
     uint16_t rx_buf_len;
-    uint16_t rx_buf_start_idx;
-    uint16_t rx_buf_end_idx;
+    Queue<buffer_segment_t, SOCKET_QUEUE_SIZE> rx_buf_queue;
 
     socket_callback_t callback; // Callback function
     bool is_sending;          // Is currently sending data
+    bool is_receiving;        // Is currently receiving data
 } socket_t;
 
 #ifdef __cplusplus
@@ -152,12 +156,31 @@ extern "C" {
 int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip, 
                 const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes, SPI_HandleTypeDef* hspi);
 
+/**
+ * @brief WIZNET W5500 interrupt callback
+ * @note Call this function from your GPIO EXTI interrupt handler when W5500 INT pin triggers
+ * @warning This is an ISR ONLY function. It queues a command to read the interrupt status.
+ */
+void wiznetInterruptCallback(void);
+/**
+ * @brief WIZNET W5500 SPI TX/RX complete callback
+ * @note Call this function from your SPI interrupt handler when TX/RX is complete
+ * @warning This is an ISR ONLY function. It processes the received data and manages the TX queue.
+ */
+void wiznetSPITxRxCompleteCallback(void);
+/**
+ * @brief WIZNET W5500 SPI TX complete callback
+ * @note Call this function from your SPI interrupt handler when TX is complete
+ * @warning This is an ISR ONLY function. It processes the received data and manages the TX queue.
+ */
+void wiznetSPITxCompleteCallback(void);
+
 // W5500 low-level functions
-bool enqueueSetReg(uint32_t addr, const uint8_t* data, uint8_t len);
-bool enqueueGetReg(uint32_t addr, uint8_t* buffer, uint8_t len);
-void generateSetRegCmd(command_t* cmd, uint32_t addr, const uint8_t* data, uint8_t len);
-int pollRegNoIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool inv=false, uint16_t timeout=1000);
-int pollRegWithIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool inv=false);
+bool enqueueSetReg(uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len);
+bool enqueueGetReg(uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
+void generateSetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len);
+int pollRegNoIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false, uint16_t timeout=2000);
+int pollRegWithIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false);
 int16_t getTXBufferIndex(socket_t* socket, uint16_t len);
 int16_t getRXBufferIndex(socket_t* socket, uint16_t len);
 

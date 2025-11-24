@@ -12,8 +12,9 @@
 #define SOCKERR_QUEUE_FULL      -3   // Command Queue is full
 #define SOCKERR_INVALID_STATE   -4   // Socket in invalid state
 #define SOCKERR_TCP_TIMEOUT     -5   // TCP timeout
-#define SOCKERR_BUFFER_FULL     -6   // Buffer is full
-#define SOCKERR_BUFFER_TOO_SMALL -7   // Buffer is too small
+#define SOCKERR_TXBUF_FULL     -6   // Buffer is full
+#define SOCKERR_TXBUF_TOO_SMALL -7  // Buffer is too small
+#define SOCKERR_BUFFERS_TOO_SMALL -8  // Buffer is too small
 
 // External socket array declaration
 extern socket_t sockets[_WIZCHIP_SOCK_NUM_];
@@ -25,6 +26,7 @@ extern "C" {
 /**
  * @brief Initialize a socket with protocol and port
  * @warning **MUST NOT be called from interrupt context!** Uses blocking operations and taskENTER_CRITICAL().
+ * @warning **MUST use tx_buf and rx_buf sizes that are at least 3 bytes larger than the respective WIZNET socket buffer sizes!**
  * @param sn Socket number (0-7)
  * @param protocol TCP or UDP protocol
  * @param port Source port number
@@ -84,6 +86,28 @@ int send(uint8_t sn, uint8_t* buf, uint16_t len);
  * @return SOCK_OK (0) on success, negative error code otherwise
  */
 int sendto(uint8_t sn, uint8_t* buf, uint16_t len, uint8_t* addr, uint16_t port);
+
+/**
+ * @brief Receive data from a TCP socket
+ * @warning **MUST NOT be called from interrupt context!** Uses taskENTER_CRITICAL().
+ * @param sn Socket number (0-7)
+ * @param buf Buffer to store received data
+ * @param len Maximum length of data to receive
+ * @return Number of bytes received, 0 if no data available
+ */
+uint32_t recv(uint8_t sn, uint8_t* buf, uint16_t len);
+
+/**
+ * @brief Receive data from a UDP socket with source address and port
+ * @warning **MUST NOT be called from interrupt context!** Uses taskENTER_CRITICAL().
+ * @param sn Socket number (0-7)
+ * @param buf Buffer to store received data
+ * @param len Maximum length of data to receive
+ * @param addr Buffer to store source IP address (4 bytes), can be NULL
+ * @param port Buffer to store source port number, can be NULL
+ * @return Number of bytes received (data only, excluding header), 0 if no data available
+ */
+uint32_t recvfrom(uint8_t sn, uint8_t* buf, uint16_t len, uint8_t* addr, uint16_t* port);
 
 #ifdef __cplusplus
 }

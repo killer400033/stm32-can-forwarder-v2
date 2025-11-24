@@ -4,6 +4,20 @@
 #include "cmsis_os.h"
 #include "main.h"
 
+// Forward declarations
+static void dmaTXCompleteCallback(void);
+static void dmaRXCompleteCallback(void);
+static inline void sendPendingData(uint8_t sn);
+static inline void receivePendingData(uint8_t sn);
+static inline void generateSetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len);
+static inline void generateGetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
+static inline void generateSetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
+static inline void generateGetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
+
+// Variables used for logging and debugging
+uint32_t enqueueFailsInISR = 0;
+uint32_t commandRetries = 0;
+
 static Queue<command_t, COMMAND_QUEUE_SIZE> command_queue;
 command_t running_cmd = {0};
 common_regs_t common_regs = {0};
@@ -49,19 +63,19 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
     }
     
     // Write Network Information
-    common_regs.GAR = gateway_ip;
+    memcpy(common_regs.GAR, gateway_ip, 4);
     if (!enqueueSetReg(0xFF, GAR, common_regs.GAR, 4)) {
         return SOCKERR_QUEUE_FULL;
     }
-    common_regs.SUBR = subnet_mask;
+    memcpy(common_regs.SUBR, subnet_mask, 4);
     if (!enqueueSetReg(0xFF, SUBR, common_regs.SUBR, 4)) {
         return SOCKERR_QUEUE_FULL;
     }
-    common_regs.SHAR = mac_addr;
+    memcpy(common_regs.SHAR, mac_addr, 6);
     if (!enqueueSetReg(0xFF, SHAR, common_regs.SHAR, 6)) {
         return SOCKERR_QUEUE_FULL;
     }
-    common_regs.SIPR = ip_address;
+    memcpy(common_regs.SIPR, ip_address, 4);
     if (!enqueueSetReg(0xFF, SIPR, common_regs.SIPR, 4)) {
         return SOCKERR_QUEUE_FULL;
     }
@@ -94,7 +108,7 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
     
     // Write RCR
     common_regs.RCR = rcr;
-    if (!enqueueSetReg(0xFF, W5500_RCR, common_regs.RCR, 1)) {
+    if (!enqueueSetReg(0xFF, W5500_RCR, &common_regs.RCR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
 
@@ -153,7 +167,7 @@ bool enqueueGetReg(uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len) {
  * this is used for changes that **DO NOT** generate interrupts on the WIZNET
  * @return SOCK_OK on success, SOCKERR_TIMEOUT on timeout, SOCKERR_QUEUE_FULL on register read error
  */
-int pollRegNoIT(uint8_t sn, uint32_t addr, const uint8_t* reg, uint16_t val, bool inv=false, uint16_t timeout=2000) {
+int pollRegNoIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false, uint16_t timeout=2000) {
     uint16_t start_time = osKernelGetTickCount();
     while (osKernelGetTickCount() - start_time < timeout && (*reg != val) ^ inv) {
         if (!enqueueGetReg(sn, addr, reg, 1)) {
@@ -172,7 +186,7 @@ int pollRegNoIT(uint8_t sn, uint32_t addr, const uint8_t* reg, uint16_t val, boo
  * this is used for changes that **DO** generate interrupts on the WIZNET
  * @return SOCK_OK on success, SOCKERR_TIMEOUT on timeout
  */
-int pollRegWithIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool inv=false) {
+int pollRegWithIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false) {
     uint16_t start_time = osKernelGetTickCount();
     // IT based polling should never timeout, but just in case communication is lost, we will timeout after 60 seconds
     while (osKernelGetTickCount() - start_time < 60000 && (*reg != val) ^ inv) {
@@ -185,29 +199,48 @@ int pollRegWithIT(uint32_t addr, const uint8_t* reg, uint16_t val, bool inv=fals
 }
 
 /**
+ * @brief WIZNET W5500 interrupt callback
+ * Called when the W5500 INT pin asserts (active low)
+ * This should be called from HAL_GPIO_EXTI_Callback or similar GPIO interrupt handler
+ */
+void wiznetInterruptCallback(void)
+{
+    // Enter critical section for ISR
+    uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+    
+    // Create READ_SIR command to read Socket Interrupt Register
+    command_t cmd;
+    generateGetRegCmd(&cmd, 0xFF, W5500_SIR, &common_regs.SIR, 1);
+    cmd.cmd_type = READ_SIR;
+    
+    // Push to front of queue for immediate processing
+    if (!queuePushFront(&command_queue, cmd)) {
+        enqueueFailsInISR++;
+    }
+    
+    taskEXIT_CRITICAL_FROM_ISR(isrm);
+}
+
+/**
  * DMA transmit/receive complete callback
  * Called when a DMA transmit/receive operation is completed
  */
-void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+void wiznetSPITxRxCompleteCallback(void)
 {
-    if (hspi->Instance == wiznet_hspi->Instance) {
-        // Process the received data first
-        dmaRXCompleteCallback();
-        
-        // Then handle the TX completion (queue management)
-        dmaTXCompleteCallback();
-    }
+    // Process the received data first
+    dmaRXCompleteCallback();
+
+    // Then handle the TX completion (queue management)
+    dmaTXCompleteCallback();
 }
 
 /**
  * DMA transmit complete callback
  * Called when a DMA transmission is completed
  */
-void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+void wiznetSPITxCompleteCallback(void)
 {
-    if (hspi->Instance == wiznet_hspi->Instance) {
-        dmaTXCompleteCallback();
-    }
+    dmaTXCompleteCallback();
 }
 
 /**
@@ -260,9 +293,15 @@ int16_t getTXBufferIndex(socket_t* socket, uint16_t len)
  * @return The index of the RX buffer where the next data should be written, -1 if there is not enough space
  */
 int16_t getRXBufferIndex(socket_t* socket, uint16_t len) {
-    int16_t queue_start = socket->rx_buf_start_idx;
-    int16_t queue_end = socket->rx_buf_end_idx;
-
+    if (queueIsEmpty(&socket->rx_buf_queue)) {
+        // Queue is empty - start at beginning if data fits
+        return (len <= socket->rx_buf_len) ? 0 : -1;
+    }
+    
+    // Get start and end positions from queue
+    int16_t queue_start = queueFront(&socket->rx_buf_queue).start_index;
+    int16_t queue_end = queueBack(&socket->rx_buf_queue).end_index;
+    
     if (queue_end >= queue_start) {
         // End is after beginning: check space at end first, then at beginning
         int16_t space_at_end = socket->rx_buf_len - queue_end;
@@ -302,29 +341,33 @@ static void dmaTXCompleteCallback(void) {
     switch (running_cmd.cmd_type) {
         case WRITE_REG:
             // Check if this is a Sn_CR (Command Register) write
-            if (running_cmd.inline_buf[0] == 0x00 && running_cmd.inline_buf[1] == 0x01 && ((running_cmd.inline_buf[2] >> 2) & 0b111) == 0b011) {
-                if (running_cmd.sn < _WIZCHIP_SOCK_NUM_) {
-                    command_t read_cmd;
-                    generateGetRegCmd(&read_cmd, running_cmd.sn, Sn_CR(running_cmd.sn), &sockets[running_cmd.sn].registers.CR, 1);
+            if (running_cmd.inline_buf[0] == 0x00 && running_cmd.inline_buf[1] == 0x01 && 
+                ((running_cmd.inline_buf[2] >> 2) & 0b111) == 0b011 && running_cmd.sn < _WIZCHIP_SOCK_NUM_) {
+                command_t read_cmd;
+                generateGetRegCmd(&read_cmd, running_cmd.sn, Sn_CR(running_cmd.sn), &sockets[running_cmd.sn].registers.CR, 1);
+                
+                if (sockets[running_cmd.sn].registers.CR != 0x00) {
+                    commandRetries++;
+                    // CR register is busy, send read command to get latest CR value instead
+                    HAL_SPI_TransmitReceive_DMA(wiznet_hspi, read_cmd.inline_buf, read_cmd.inline_buf, read_cmd.len);
                     
-                    if (sockets[running_cmd.sn].registers.CR != 0x00) {
-                        // CR register is busy, send read command to get latest CR value instead
-                        HAL_SPI_TransmitReceive_DMA(wiznet_hspi, read_cmd.inline_buf, read_cmd.inline_buf, read_cmd.len);
-                        
-                        // Re-enqueue the original write command to front
-                        uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
-                        queuePushFront(&command_queue, running_cmd);
-                        taskEXIT_CRITICAL_FROM_ISR(isrm);
+                    // Re-enqueue the original write command to front
+                    uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+                    if (!queuePushFront(&command_queue, running_cmd)) {
+                        enqueueFailsInISR++;
                     }
-                    else {
-                        // CR register is free, send write command
-                        HAL_SPI_Transmit_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.len);
+                    taskEXIT_CRITICAL_FROM_ISR(isrm);
+                }
+                else {
+                    // CR register is free, send write command
+                    HAL_SPI_Transmit_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.len);
 
-                        // Enqueue read command to front to update CR as soon as possible
-                        uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
-                        queuePushFront(&command_queue, read_cmd);
-                        taskEXIT_CRITICAL_FROM_ISR(isrm);
+                    // Enqueue read command to front to update CR as soon as possible
+                    uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+                    if (!queuePushFront(&command_queue, read_cmd)) {
+                        enqueueFailsInISR++;
                     }
+                    taskEXIT_CRITICAL_FROM_ISR(isrm);
                 }
             }
             else {
@@ -344,18 +387,36 @@ static void dmaTXCompleteCallback(void) {
         case READ_SIR:
             HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
             break;
+        case CHECK_RCV:
+            HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            break;
         default:
             break;
     }
 }
 
 static void dmaRXCompleteCallback(void) {
-    socket_t* socket = &sockets[running_cmd.sn];
+    socket_t* socket = NULL;
+    if (running_cmd.sn < _WIZCHIP_SOCK_NUM_) {
+        socket = &sockets[running_cmd.sn];
+    }
     switch (running_cmd.cmd_type) {
         case READ_REG:
             memcpy(running_cmd.ptr, &(running_cmd.inline_buf[3]), running_cmd.len - 3);
             break;
+        
         case READ_BUF:
+            // Add metadata to rx queue
+            buffer_segment_t segment;
+            segment.start_index = GET_U16(running_cmd.ptr);
+            segment.end_index = segment.start_index + running_cmd.len;
+
+            uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+            if (!queuePushBack(&socket->rx_buf_queue, segment)) {
+                enqueueFailsInISR++;
+            }
+            taskEXIT_CRITICAL_FROM_ISR(isrm);
+
             // Data put into buffer, inform upper layer
             if (socket->callback != NULL) {
                 uint16_t len = running_cmd.len - 3;
@@ -372,7 +433,9 @@ static void dmaRXCompleteCallback(void) {
                     cmd.cmd_type = READ_SOC;
                     
                     uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
-                    queuePushFront(&command_queue, cmd);
+                    if (!queuePushFront(&command_queue, cmd)) {
+                        enqueueFailsInISR++;
+                    }
                     taskEXIT_CRITICAL_FROM_ISR(isrm);
                 }
             }
@@ -402,18 +465,7 @@ static void dmaRXCompleteCallback(void) {
             if (socket->registers.IR & Sn_IR_RECV) {
                 // Data received
                 uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
-
-                uint32_t rx_buf_index = getRXBufferIndex(socket, socket->registers.RX_RSR + 3);
-                if (rx_buf_index != -1) {
-                    command_t cmd;
-                    uint32_t ptr = socket->registers.RX_RD;
-                    uint32_t addr = ((uint32_t)ptr << 8) + (WIZCHIP_RXBUF_BLOCK(sn) << 3);
-                    generateGetBufCmd(&cmd, running_cmd.sn, addr, socket->rx_buf + rx_buf_index, socket->registers.RX_RSR + 3);
-
-                    queuePushFront(&command_queue, cmd);
-                }
-
-
+                receivePendingData(running_cmd.sn);
                 taskEXIT_CRITICAL_FROM_ISR(isrm);
             }
 
@@ -426,19 +478,127 @@ static void dmaRXCompleteCallback(void) {
             
             if (socket->registers.IR & Sn_IR_SENDOK) {
                 // Send OK, socket is ready to send data
+                uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+                buffer_segment_t segment;
+                queuePopFront(&socket->tx_buf_queue, &segment); // Remove segment that was just sent
+
+                socket->is_sending = false;
+                sendPendingData(running_cmd.sn);
+                taskEXIT_CRITICAL_FROM_ISR(isrm);
             }
 
             // Clear the interrupt register by writing the same value back
             command_t cmd;
-            generateSetRegCmd(&cmd, running_cmd.sn, Sn_IR(running_cmd.sn), &sockets[running_cmd.sn].registers.IR, 1);
+            generateSetRegCmd(&cmd, running_cmd.sn, Sn_IR(running_cmd.sn), &socket->registers.IR, 1);
             
             uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
-            queuePushFront(&command_queue, cmd);
+            if (!queuePushFront(&command_queue, cmd)) {
+                enqueueFailsInISR++;
+            }
             taskEXIT_CRITICAL_FROM_ISR(isrm);
+            break;
+        case CHECK_RCV:
+            // Receive process completed, check again if there is more data to receive
+            memcpy(running_cmd.ptr, &(running_cmd.inline_buf[3]), running_cmd.len - 3);
 
+            uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+            sockets[running_cmd.sn].is_receiving = false;
+            receivePendingData(running_cmd.sn);
+            taskEXIT_CRITICAL_FROM_ISR(isrm);
             break;
         default:
             break;
+    }
+}
+
+// **MUST BE CALLED INSIDE A CRITICAL SECTION**
+static inline void sendPendingData(uint8_t sn) {
+    if (sockets[sn].is_sending) return;
+
+    buffer_segment_t segment;
+    // Just peek front, will be popped when send is complete
+    if (queuePeekFront(&sockets[sn].tx_buf_queue, &segment)) {
+        sockets[sn].is_sending = true;
+
+        command_t cmd;
+
+        if (sockets[sn].registers.MR & Sn_MR_UDP) {
+            generateSetRegCmd(&cmd, sn, Sn_DIPR(sn), segment.addr, 4);
+            if (!queuePushBack(&command_queue, cmd)) {
+                enqueueFailsInISR++;
+            }
+            generateSetRegCmd(&cmd, sn, Sn_DPORT(sn), (uint8_t*)&segment.port, 2);
+            if (!queuePushBack(&command_queue, cmd)) {
+                enqueueFailsInISR++;
+            }
+        }
+        
+        uint32_t tx_wr = GET_U16(sockets[sn].registers.TX_WR);
+        uint32_t addr = ((uint32_t)tx_wr << 8) + (WIZCHIP_TXBUF_BLOCK(running_cmd.sn) << 3);
+        uint32_t len = segment.end_index - segment.start_index;
+        generateSetBufCmd(&cmd, sn, addr, sockets[sn].tx_buf + segment.start_index, len);
+        if (!queuePushBack(&command_queue, cmd)) {
+            enqueueFailsInISR++;
+        }
+
+        uint8_t new_tx_wr_bytes[2];
+        SET_U16(new_tx_wr_bytes, tx_wr + len);
+        generateSetRegCmd(&cmd, sn, Sn_TX_WR(sn), new_tx_wr_bytes, 2);
+        if (!queuePushBack(&command_queue, cmd)) {
+            enqueueFailsInISR++;
+        }
+
+        uint8_t send_cmd = Sn_CR_SEND;
+        generateSetRegCmd(&cmd, sn, Sn_CR(sn), &send_cmd, 1);
+        if (!queuePushBack(&command_queue, cmd)) {
+            enqueueFailsInISR++;
+        }
+    }
+}
+
+// **MUST BE CALLED INSIDE A CRITICAL SECTION**
+static inline void receivePendingData(uint8_t sn) {
+    if (sockets[sn].is_receiving) return;
+
+    uint16_t rx_rsr = GET_U16(sockets[sn].registers.RX_RSR);
+    if (rx_rsr > 0) {
+        command_t cmd;
+
+        uint32_t rx_buf_index = getRXBufferIndex(&sockets[sn], rx_rsr + 3);
+        if (rx_buf_index != -1) {
+            sockets[sn].is_receiving = true;
+
+            uint16_t rx_rd = GET_U16(sockets[sn].registers.RX_RD);
+            uint32_t ptr = rx_rd;
+            uint32_t addr = ((uint32_t)ptr << 8) + (WIZCHIP_RXBUF_BLOCK(sn) << 3);
+            generateGetBufCmd(&cmd, sn, addr, sockets[sn].rx_buf + rx_buf_index, rx_rsr + 3);
+            if (!queuePushBack(&command_queue, cmd)) {
+                enqueueFailsInISR++;
+            }
+
+            uint16_t new_rx_rd = rx_rd + rx_rsr;
+            uint8_t rx_rd_bytes[2];
+            SET_U16(rx_rd_bytes, new_rx_rd);
+            generateSetRegCmd(&cmd, sn, Sn_RX_RD(sn), rx_rd_bytes, 2);
+            if (!queuePushBack(&command_queue, cmd)) {
+                enqueueFailsInISR++;
+            }
+
+            uint8_t recv_cmd = Sn_CR_RECV;
+            generateSetRegCmd(&cmd, sn, Sn_CR(sn), &recv_cmd, 1);
+            if (!queuePushBack(&command_queue, cmd)) {
+                enqueueFailsInISR++;
+            }
+            if (!queuePushBack(&command_queue, cmd)) {
+                enqueueFailsInISR++;
+            }
+
+            generateGetRegCmd(&cmd, sn, Sn_RX_RSR(sn), &(sockets[sn].registers.RX_RSR), 4);
+            cmd.cmd_type = CHECK_RCV;
+            if (!queuePushBack(&command_queue, cmd)) {
+                enqueueFailsInISR++;
+            }
+        }
     }
 }
 
