@@ -57,6 +57,10 @@
 
 #define WIZCHIP_OFFSET_INC(ADDR, N)    (ADDR + (N<<8)) //< Increase offset address
 
+#define _W5500_SPI_VDM_OP_          0x00
+#define _W5500_SPI_FDM_OP_LEN1_     0x01
+#define _W5500_SPI_FDM_OP_LEN2_     0x02
+#define _W5500_SPI_FDM_OP_LEN4_     0x03
 
 ///////////////////////////////////////
 // Definition For Legacy Chip Driver //

@@ -212,7 +212,7 @@ int send(uint8_t sn, uint8_t* buf, uint16_t len) {
         return SOCKERR_INVALID_STATE;
     }
 
-    if (sockets[sn].registers.TX_BUF_SIZE < len) {
+    if (sockets[sn].registers.TXBUF_SIZE < len) {
         return SOCKERR_TXBUF_TOO_SMALL;
     }
 

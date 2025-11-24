@@ -7,8 +7,6 @@
 // Forward declarations
 static void dmaTXCompleteCallback(void);
 static void dmaRXCompleteCallback(void);
-static inline void sendPendingData(uint8_t sn);
-static inline void receivePendingData(uint8_t sn);
 static inline void generateSetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len);
 static inline void generateGetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
 static inline void generateSetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
@@ -23,25 +21,49 @@ command_t running_cmd = {0};
 common_regs_t common_regs = {0};
 
 static SPI_HandleTypeDef* wiznet_hspi = NULL;
+static GPIO_TypeDef* wiznet_cs_port = NULL;
+static uint16_t wiznet_cs_pin = 0;
+
+/**
+ * @brief Configure W5500 hardware (SPI and CS pin)
+ * @warning Must be called before initWizchip()
+ * @param hspi SPI handle for W5500 communication
+ * @param cs_port GPIO port for CS pin (e.g., GPIOA)
+ * @param cs_pin GPIO pin for CS (e.g., GPIO_PIN_4)
+ * @return SOCK_OK (0) on success, SOCKERR_INVALID_PARAM if parameters are invalid
+ */
+int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t cs_pin) {
+    if (hspi == NULL || cs_port == NULL) {
+        return SOCKERR_INVALID_PARAM;
+    }
+
+    wiznet_hspi = hspi;
+    wiznet_cs_port = cs_port;
+    wiznet_cs_pin = cs_pin;
+    
+    // Initialize CS pin to deselected (high)
+    HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_SET);
+    
+    return SOCK_OK;
+}
 
 /**
  * @brief Initialize W5500 chip with network configuration
  * @warning **MUST NOT be called from interrupt context!** This function uses blocking operations, osDelay(), and taskENTER_CRITICAL().
+ * @warning Must call setWiznetHardware() before calling this function
  * @param ip_address IP address (4 bytes)
  * @param subnet_mask Subnet mask (4 bytes)
  * @param gateway_ip Gateway IP address (4 bytes)
  * @param rx_buf_sizes RX buffer sizes for all 8 sockets (in KB)
  * @param tx_buf_sizes TX buffer sizes for all 8 sockets (in KB)
- * @param hspi SPI handle for W5500 communication
  * @return SOCK_OK (0) on success, negative error code otherwise
  */
 int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
-                const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes, SPI_HandleTypeDef* hspi) {
-    if (hspi == NULL) {
+                const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes) {
+    // Verify hardware has been configured
+    if (wiznet_hspi == NULL || wiznet_cs_port == NULL) {
         return SOCKERR_INVALID_PARAM;
     }
-
-    wiznet_hspi = hspi;
 
     const uint8_t mac_addr[] = MAC_ADDRESS;
     const uint16_t intlevel = INTLEVEL;
@@ -227,6 +249,9 @@ void wiznetInterruptCallback(void)
  */
 void wiznetSPITxRxCompleteCallback(void)
 {
+    // CS deselect (set high)
+    HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_SET);
+
     // Process the received data first
     dmaRXCompleteCallback();
 
@@ -240,6 +265,9 @@ void wiznetSPITxRxCompleteCallback(void)
  */
 void wiznetSPITxCompleteCallback(void)
 {
+    // CS deselect (set high)
+    HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_SET);
+
     dmaTXCompleteCallback();
 }
 
@@ -338,6 +366,9 @@ static void dmaTXCompleteCallback(void) {
 
     if (!success) return;
 
+    // CS select (set low)
+    HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_RESET);
+
     switch (running_cmd.cmd_type) {
         case WRITE_REG:
             // Check if this is a Sn_CR (Command Register) write
@@ -391,6 +422,8 @@ static void dmaTXCompleteCallback(void) {
             HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
             break;
         default:
+            // CS deselect (set high) - for unknown command types
+            HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_SET);
             break;
     }
 }
@@ -406,9 +439,11 @@ static void dmaRXCompleteCallback(void) {
             break;
         
         case READ_BUF:
+            if (socket == NULL) break;
+
             // Add metadata to rx queue
             buffer_segment_t segment;
-            segment.start_index = GET_U16(running_cmd.ptr);
+            segment.start_index = running_cmd.ptr - socket->rx_buf;
             segment.end_index = segment.start_index + running_cmd.len;
 
             uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
@@ -442,6 +477,8 @@ static void dmaRXCompleteCallback(void) {
             break;
         // Called when interrupt is generated, and we read socket regs for sockets that have interrupts
         case READ_SOC:
+            if (socket == NULL) break;
+            
             if (socket->registers.IR & Sn_IR_CON) {
                 // Connection established
                 // No action needed
@@ -498,6 +535,8 @@ static void dmaRXCompleteCallback(void) {
             taskEXIT_CRITICAL_FROM_ISR(isrm);
             break;
         case CHECK_RCV:
+            if (socket == NULL) break;
+            
             // Receive process completed, check again if there is more data to receive
             memcpy(running_cmd.ptr, &(running_cmd.inline_buf[3]), running_cmd.len - 3);
 
@@ -512,7 +551,7 @@ static void dmaRXCompleteCallback(void) {
 }
 
 // **MUST BE CALLED INSIDE A CRITICAL SECTION**
-static inline void sendPendingData(uint8_t sn) {
+void sendPendingData(uint8_t sn) {
     if (sockets[sn].is_sending) return;
 
     buffer_segment_t segment;
@@ -534,7 +573,7 @@ static inline void sendPendingData(uint8_t sn) {
         }
         
         uint32_t tx_wr = GET_U16(sockets[sn].registers.TX_WR);
-        uint32_t addr = ((uint32_t)tx_wr << 8) + (WIZCHIP_TXBUF_BLOCK(running_cmd.sn) << 3);
+        uint32_t addr = ((uint32_t)tx_wr << 8) + (WIZCHIP_TXBUF_BLOCK(sn) << 3);
         uint32_t len = segment.end_index - segment.start_index;
         generateSetBufCmd(&cmd, sn, addr, sockets[sn].tx_buf + segment.start_index, len);
         if (!queuePushBack(&command_queue, cmd)) {
@@ -557,7 +596,7 @@ static inline void sendPendingData(uint8_t sn) {
 }
 
 // **MUST BE CALLED INSIDE A CRITICAL SECTION**
-static inline void receivePendingData(uint8_t sn) {
+void receivePendingData(uint8_t sn) {
     if (sockets[sn].is_receiving) return;
 
     uint16_t rx_rsr = GET_U16(sockets[sn].registers.RX_RSR);

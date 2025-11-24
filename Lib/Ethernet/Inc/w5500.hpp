@@ -143,18 +143,28 @@ extern "C" {
 #endif
 
 /**
+ * @brief Configure W5500 hardware (SPI and CS pin)
+ * @warning Must be called before initWizchip()
+ * @param hspi SPI handle for W5500 communication
+ * @param cs_port GPIO port for CS pin (e.g., GPIOA)
+ * @param cs_pin GPIO pin for CS (e.g., GPIO_PIN_4)
+ * @return SOCK_OK (0) on success, SOCKERR_INVALID_PARAM if parameters are invalid
+ */
+int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t cs_pin);
+
+/**
  * @brief Initialize W5500 chip with network configuration
  * @warning **MUST NOT be called from interrupt context!** Uses blocking operations, osDelay(), and taskENTER_CRITICAL().
+ * @warning Must call setWiznetHardware() before calling this function
  * @param ip_address IP address (4 bytes)
  * @param subnet_mask Subnet mask (4 bytes)
  * @param gateway_ip Gateway IP address (4 bytes)
  * @param rx_buf_sizes RX buffer sizes for all 8 sockets (in KB)
  * @param tx_buf_sizes TX buffer sizes for all 8 sockets (in KB)
- * @param hspi SPI handle for W5500 communication
  * @return SOCK_OK (0) on success, negative error code otherwise
  */
 int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip, 
-                const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes, SPI_HandleTypeDef* hspi);
+                const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes);
 
 /**
  * @brief WIZNET W5500 interrupt callback
@@ -183,6 +193,20 @@ int pollRegNoIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=
 int pollRegWithIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false);
 int16_t getTXBufferIndex(socket_t* socket, uint16_t len);
 int16_t getRXBufferIndex(socket_t* socket, uint16_t len);
+
+/**
+ * @brief Initiate sending of pending data on a socket
+ * @warning **MUST BE CALLED INSIDE A CRITICAL SECTION!**
+ * @param sn Socket number (0-7)
+ */
+void sendPendingData(uint8_t sn);
+
+/**
+ * @brief Initiate receiving of pending data on a socket
+ * @warning **MUST BE CALLED INSIDE A CRITICAL SECTION!**
+ * @param sn Socket number (0-7)
+ */
+void receivePendingData(uint8_t sn);
 
 // External declarations
 extern command_t running_cmd;
