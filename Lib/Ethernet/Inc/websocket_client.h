@@ -1,9 +1,15 @@
 #ifndef WEBSOCKET_CLIENT_H
 #define WEBSOCKET_CLIENT_H
 
-#include "socket.h"
 #include <stdint.h>
 #include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Include socket for definitions - websocket needs full porting to new driver
+#include "socket.h"
 
 // WebSocket constants
 #define WS_MAGIC_STRING "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -71,5 +77,9 @@ static int8_t ws_parse_handshake_response(websocket_client_t *client, const char
 static uint16_t ws_create_frame(uint8_t *buffer, ws_opcode_t opcode, const uint8_t *payload, uint16_t payload_len, bool mask);
 static int8_t ws_parse_frame(const uint8_t *buffer, uint16_t buffer_len, ws_frame_t *frame);
 static void ws_mask_payload(uint8_t *payload, uint16_t len, const uint8_t *mask);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // WEBSOCKET_CLIENT_H

@@ -4,7 +4,7 @@
 #include "pb_common.h"
 #include "pb_encode.h"
 #include "websocket_client.h"
-#include "w5500_driver.h"
+#include "w5500_setup.h"
 #include "storage.h"
 #include "dns_client.h"
 #include "dns_resolve.h"

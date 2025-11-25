@@ -24,6 +24,10 @@ extern void osDelay(uint32_t ticks);
 static ntp_config_t g_ntp_config = {0};
 static bool g_ntp_initialized = false;
 
+// Static buffers to avoid stack usage (each 48 bytes)
+static ntp_packet_t ntp_request_packet;
+static uint8_t ntp_response_buffer[NTP_PACKET_SIZE];
+
 // Error strings for debugging
 static const char* ntp_error_strings[] = {
     "Success",                      // NTP_OK
@@ -64,9 +68,14 @@ int8_t ntp_init(ntp_config_t* config)
         g_ntp_config.version = NTP_VERSION_4;
     }
     
-    // Initialize socket for UDP
-    int8_t result = socket(g_ntp_config.socket_num, Sn_MR_UDP, 0, 0);
-    if (result != g_ntp_config.socket_num) {
+    // Generate random source port (1024-50000)
+    uint16_t source_port = 1024 + (HAL_GetTick() % (50000 - 1024));
+    
+    // Initialize socket for UDP with provided buffers
+    int8_t result = socket(g_ntp_config.socket_num, SOCKET_PROTOCOL_UDP, source_port,
+                          g_ntp_config.tx_buf, g_ntp_config.tx_buf_len,
+                          g_ntp_config.rx_buf, g_ntp_config.rx_buf_len, NULL);
+    if (result != SOCK_OK) {
         return NTP_ERROR_SOCKET_FAIL;
     }
     
@@ -218,16 +227,15 @@ int8_t _ntp_parse_response(const uint8_t* buffer, uint16_t length, ntp_response_
  */
 int8_t _ntp_send_request(void)
 {
-    ntp_packet_t request;
-    int8_t result = _ntp_build_request(&request);
+    int8_t result = _ntp_build_request(&ntp_request_packet);
     if (result != NTP_OK) {
         return result;
     }
     
-    // Send request
-    int32_t sent = sendto(g_ntp_config.socket_num, (uint8_t*)&request, NTP_PACKET_SIZE,
-                         g_ntp_config.ntp_server, NTP_PORT);
-    if (sent != NTP_PACKET_SIZE) {
+    // Send request using new API
+    int32_t sent = sendto(g_ntp_config.socket_num, (uint8_t*)&ntp_request_packet, 
+                         NTP_PACKET_SIZE, g_ntp_config.ntp_server, NTP_PORT);
+    if (sent != SOCK_OK) {
         return NTP_ERROR_NETWORK;
     }
     
@@ -239,7 +247,6 @@ int8_t _ntp_send_request(void)
  */
 int8_t _ntp_receive_response(ntp_response_t* response)
 {
-    uint8_t buffer[NTP_PACKET_SIZE];
     uint8_t peer_ip[4];
     uint16_t peer_port;
     
@@ -247,21 +254,19 @@ int8_t _ntp_receive_response(ntp_response_t* response)
     uint32_t start_time = HAL_GetTick();
     
     while ((HAL_GetTick() - start_time) < g_ntp_config.timeout_ms) {
-        uint16_t received_size = getSn_RX_RSR(g_ntp_config.socket_num);
+        // Try to receive data using new API
+        int32_t recv_len = recvfrom(g_ntp_config.socket_num, ntp_response_buffer, 
+                                   NTP_PACKET_SIZE, peer_ip, &peer_port);
         
-        if (received_size >= NTP_PACKET_SIZE) {
-            int32_t recv_len = recvfrom(g_ntp_config.socket_num, buffer, 
-                                      sizeof(buffer), peer_ip, &peer_port);
-            
-            if (recv_len >= NTP_PACKET_SIZE && peer_port == NTP_PORT) {
-                // Verify the response came from the expected server
-                if (memcmp(peer_ip, g_ntp_config.ntp_server, 4) == 0) {
-                    return _ntp_parse_response(buffer, recv_len, response);
-                }
+        if (recv_len == SOCK_OK) {
+            // Check if response came from the expected server and port
+            if (peer_port == NTP_PORT && 
+                memcmp(peer_ip, g_ntp_config.ntp_server, 4) == 0) {
+                return _ntp_parse_response(ntp_response_buffer, NTP_PACKET_SIZE, response);
             }
         }
         
-        osDelay(10); // Small delay to prevent busy waiting
+        osDelay(100); // Small delay to prevent busy waiting
     }
     
     return NTP_ERROR_TIMEOUT;

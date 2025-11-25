@@ -3,6 +3,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// TODO: Websocket client needs full porting to new driver API
+// Temporary buffers for compilation - MUST BE PROPERLY IMPLEMENTED
+static uint8_t ws_temp_tx_buf[2048];
+static uint8_t ws_temp_rx_buf[2048];
+
 // Helper functions
 static void ws_generate_key(char *key);
 static void ws_base64_encode(const uint8_t *input, uint16_t input_len, char *output);
@@ -47,8 +52,11 @@ int8_t ws_client_connect(websocket_client_t *client, uint8_t *host, uint16_t por
     strncpy(client->path, path, sizeof(client->path) - 1);
 
     // Create TCP socket
-    int8_t result = socket(client->socket_num, Sn_MR_TCP, 0, 0);
-    if (result != client->socket_num) {
+    // TODO: WEBSOCKET NEEDS PROPER PORTING - using temporary buffers
+    int8_t result = socket(client->socket_num, SOCKET_PROTOCOL_TCP, 0, 
+                          ws_temp_tx_buf, sizeof(ws_temp_tx_buf), 
+                          ws_temp_rx_buf, sizeof(ws_temp_rx_buf), NULL);
+    if (result != SOCK_OK) {
         client->state = WS_STATE_ERROR;
         printf("2\n");
         return -1;
@@ -207,11 +215,12 @@ int8_t ws_client_receive(websocket_client_t *client, uint8_t *buffer, uint16_t *
     }
 
     // Check if data is available
-    uint16_t recv_size;
-    getsockopt(client->socket_num, SO_RECVBUF, &recv_size);
-    if (recv_size == 0) {
-        return 0; // No data available
-    }
+    // TODO: getsockopt not available in new driver - needs porting
+    // uint16_t recv_size;
+    // getsockopt(client->socket_num, SO_RECVBUF, &recv_size);
+    // if (recv_size == 0) {
+    //     return 0; // No data available
+    // }
 
     // Receive frame header first
     int32_t received = recv(client->socket_num, client->rx_buffer, sizeof(client->rx_buffer));
@@ -355,9 +364,10 @@ void ws_client_process(websocket_client_t *client) {
     switch (client->state) {
         case WS_STATE_HANDSHAKE: {
             // Check for handshake response
-            uint16_t recv_size;
-            getsockopt(client->socket_num, SO_RECVBUF, &recv_size);
-            if (recv_size > 0) {
+            // TODO: getsockopt not available in new driver - needs porting
+            // uint16_t recv_size;
+            // getsockopt(client->socket_num, SO_RECVBUF, &recv_size);
+            // if (recv_size > 0) {
                 int32_t received = recv(client->socket_num, client->rx_buffer, sizeof(client->rx_buffer) - 1);
                 if (received > 0) {
                     client->rx_buffer[received] = '\0';
@@ -368,18 +378,19 @@ void ws_client_process(websocket_client_t *client) {
                         close(client->socket_num);
                     }
                 }
-            }
+            // }
             break;
         }
 
         case WS_STATE_CLOSING: {
             // Wait for close confirmation or timeout
-            uint16_t recv_size;
-            getsockopt(client->socket_num, SO_RECVBUF, &recv_size);
-            if (recv_size > 0) {
+            // TODO: getsockopt not available in new driver - needs porting
+            // uint16_t recv_size;
+            // getsockopt(client->socket_num, SO_RECVBUF, &recv_size);
+            // if (recv_size > 0) {
                 recv(client->socket_num, client->rx_buffer, sizeof(client->rx_buffer));
                 // Could parse close frame here
-            }
+            // }
             // For simplicity, just close after sending close frame
             close(client->socket_num);
             client->state = WS_STATE_DISCONNECTED;

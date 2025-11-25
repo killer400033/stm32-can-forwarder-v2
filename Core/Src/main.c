@@ -31,7 +31,7 @@
 #include "forwarder_pb.pb.h"
 #include "storage.h"
 #include "dns_resolve.h"
-#include "w5500_driver.h"
+#include "w5500_setup.h"
 #include "adc_scanner.h"
 #include "log_handler.h"
 /* USER CODE END Includes */

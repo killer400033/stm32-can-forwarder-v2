@@ -1,8 +1,9 @@
 #include <cstring>
-#include "w5500.hpp"
-#include "socket.hpp"
+#include "socket.h"
 #include "cmsis_os.h"
 #include "main.h"
+#include "w5500_macros.h"
+#include "w5500.hpp"
 
 // Forward declarations
 static void dmaTXCompleteCallback(void);
@@ -17,8 +18,10 @@ uint32_t enqueueFailsInISR = 0;
 uint32_t commandRetries = 0;
 
 static Queue<command_t, COMMAND_QUEUE_SIZE> command_queue;
-command_t running_cmd = {0};
+command_t running_cmd = {WRITE_REG, 0, {0}, nullptr, 0}; // Just to make sure no RX commands are run
 common_regs_t common_regs = {0};
+
+socket_t sockets[_WIZCHIP_SOCK_NUM_] = {0};
 
 static SPI_HandleTypeDef* wiznet_hspi = NULL;
 static GPIO_TypeDef* wiznet_cs_port = NULL;
@@ -66,7 +69,7 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
     }
 
     const uint8_t mac_addr[] = MAC_ADDRESS;
-    const uint16_t intlevel = INTLEVEL;
+    const uint16_t intlevel = INT_LEVEL;
     const uint16_t rtr = RETRY_TIME * 10;
     const uint8_t rcr = RETRY_COUNT;
 
@@ -74,50 +77,50 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
 
     // Write reset command
     common_regs.MR = MR_RST;
-    if (!enqueueSetReg(0xFF, MR, &common_regs.MR, 1)) {
+    if (!enqueueSetReg(0xFF, W5500_MR, &common_regs.MR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
 
     // Poll for reset to complete
-    int ret = pollRegNoIT(0xFF, MR, &common_regs.MR, 0x00);
+    int ret = pollRegNoIT(0xFF, W5500_MR, &common_regs.MR, 0x00);
     if (ret != SOCK_OK) {
         return ret;
     }
     
     // Write Network Information
     memcpy(common_regs.GAR, gateway_ip, 4);
-    if (!enqueueSetReg(0xFF, GAR, common_regs.GAR, 4)) {
+    if (!enqueueSetReg(0xFF, W5500_GAR, common_regs.GAR, 4)) {
         return SOCKERR_QUEUE_FULL;
     }
     memcpy(common_regs.SUBR, subnet_mask, 4);
-    if (!enqueueSetReg(0xFF, SUBR, common_regs.SUBR, 4)) {
+    if (!enqueueSetReg(0xFF, W5500_SUBR, common_regs.SUBR, 4)) {
         return SOCKERR_QUEUE_FULL;
     }
     memcpy(common_regs.SHAR, mac_addr, 6);
-    if (!enqueueSetReg(0xFF, SHAR, common_regs.SHAR, 6)) {
+    if (!enqueueSetReg(0xFF, W5500_SHAR, common_regs.SHAR, 6)) {
         return SOCKERR_QUEUE_FULL;
     }
     memcpy(common_regs.SIPR, ip_address, 4);
-    if (!enqueueSetReg(0xFF, SIPR, common_regs.SIPR, 4)) {
+    if (!enqueueSetReg(0xFF, W5500_SIPR, common_regs.SIPR, 4)) {
         return SOCKERR_QUEUE_FULL;
     }
     
     // Write INTLEVEL
     common_regs.INTLEVEL[0] = (intlevel >> 8) & 0xFF;
     common_regs.INTLEVEL[1] = intlevel & 0xFF;
-    if (!enqueueSetReg(0xFF, INTLEVEL, common_regs.INTLEVEL, 2)) {
+    if (!enqueueSetReg(0xFF, W5500_INTLEVEL, common_regs.INTLEVEL, 2)) {
         return SOCKERR_QUEUE_FULL;
     }
 
     // Enable interrupts for all sockets
     common_regs.SIMR = 0xFF;
-    if (!enqueueSetReg(0xFF, SIMR, &common_regs.SIMR, 1)) {
+    if (!enqueueSetReg(0xFF, W5500_SIMR, &common_regs.SIMR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
 
     // Disable all common interrupts
     common_regs.IMR = 0x00;
-    if (!enqueueSetReg(0xFF, IMR, &common_regs.IMR, 1)) {
+    if (!enqueueSetReg(0xFF, W5500_IMR, &common_regs.IMR, 1)) {
         return SOCKERR_QUEUE_FULL;
     }
     
@@ -189,7 +192,7 @@ bool enqueueGetReg(uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len) {
  * this is used for changes that **DO NOT** generate interrupts on the WIZNET
  * @return SOCK_OK on success, SOCKERR_TIMEOUT on timeout, SOCKERR_QUEUE_FULL on register read error
  */
-int pollRegNoIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false, uint16_t timeout=2000) {
+int pollRegNoIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv, uint16_t timeout) {
     uint16_t start_time = osKernelGetTickCount();
     while (osKernelGetTickCount() - start_time < timeout && (*reg != val) ^ inv) {
         if (!enqueueGetReg(sn, addr, reg, 1)) {
@@ -208,7 +211,7 @@ int pollRegNoIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=
  * this is used for changes that **DO** generate interrupts on the WIZNET
  * @return SOCK_OK on success, SOCKERR_TIMEOUT on timeout
  */
-int pollRegWithIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false) {
+int pollRegWithIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv) {
     uint16_t start_time = osKernelGetTickCount();
     // IT based polling should never timeout, but just in case communication is lost, we will timeout after 60 seconds
     while (osKernelGetTickCount() - start_time < 60000 && (*reg != val) ^ inv) {
@@ -285,8 +288,8 @@ int16_t getTXBufferIndex(socket_t* socket, uint16_t len)
     }
     
     // Get start and end positions from queue
-    int16_t queue_start = queueFront(&socket->tx_buf_queue).start_index;
-    int16_t queue_end = queueBack(&socket->tx_buf_queue).end_index;
+    int16_t queue_start = queueFront(&socket->tx_buf_queue)->start_index;
+    int16_t queue_end = queueBack(&socket->tx_buf_queue)->end_index;
     
     if (queue_end >= queue_start) {
         // End is after beginning: check space at end first, then at beginning
@@ -327,8 +330,8 @@ int16_t getRXBufferIndex(socket_t* socket, uint16_t len) {
     }
     
     // Get start and end positions from queue
-    int16_t queue_start = queueFront(&socket->rx_buf_queue).start_index;
-    int16_t queue_end = queueBack(&socket->rx_buf_queue).end_index;
+    int16_t queue_start = queueFront(&socket->rx_buf_queue)->start_index;
+    int16_t queue_end = queueBack(&socket->rx_buf_queue)->end_index;
     
     if (queue_end >= queue_start) {
         // End is after beginning: check space at end first, then at beginning
@@ -438,7 +441,7 @@ static void dmaRXCompleteCallback(void) {
             memcpy(running_cmd.ptr, &(running_cmd.inline_buf[3]), running_cmd.len - 3);
             break;
         
-        case READ_BUF:
+        case READ_BUF: {
             if (socket == NULL) break;
 
             // Add metadata to rx queue
@@ -458,8 +461,9 @@ static void dmaRXCompleteCallback(void) {
                 socket->callback(SOCKET_RECV_CALLBACK, &len);
             }
             break;
+        }
         // Called when interrupt is generated, and we read SIR register
-        case READ_SIR:
+        case READ_SIR: {
             memcpy(running_cmd.ptr, &(running_cmd.inline_buf[3]), running_cmd.len - 3);
             command_t cmd;
             for (uint8_t i = 0; i < _WIZCHIP_SOCK_NUM_; i++) {
@@ -475,8 +479,9 @@ static void dmaRXCompleteCallback(void) {
                 }
             }
             break;
+        }
         // Called when interrupt is generated, and we read socket regs for sockets that have interrupts
-        case READ_SOC:
+        case READ_SOC: {
             if (socket == NULL) break;
             
             if (socket->registers.IR & Sn_IR_CON) {
@@ -515,13 +520,13 @@ static void dmaRXCompleteCallback(void) {
             
             if (socket->registers.IR & Sn_IR_SENDOK) {
                 // Send OK, socket is ready to send data
-                uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+                uint32_t isrm_send = taskENTER_CRITICAL_FROM_ISR();
                 buffer_segment_t segment;
                 queuePopFront(&socket->tx_buf_queue, &segment); // Remove segment that was just sent
 
                 socket->is_sending = false;
                 sendPendingData(running_cmd.sn);
-                taskEXIT_CRITICAL_FROM_ISR(isrm);
+                taskEXIT_CRITICAL_FROM_ISR(isrm_send);
             }
 
             // Clear the interrupt register by writing the same value back
@@ -534,7 +539,8 @@ static void dmaRXCompleteCallback(void) {
             }
             taskEXIT_CRITICAL_FROM_ISR(isrm);
             break;
-        case CHECK_RCV:
+        }
+        case CHECK_RCV: {
             if (socket == NULL) break;
             
             // Receive process completed, check again if there is more data to receive
@@ -545,6 +551,7 @@ static void dmaRXCompleteCallback(void) {
             receivePendingData(running_cmd.sn);
             taskEXIT_CRITICAL_FROM_ISR(isrm);
             break;
+        }
         default:
             break;
     }
@@ -632,7 +639,7 @@ void receivePendingData(uint8_t sn) {
                 enqueueFailsInISR++;
             }
 
-            generateGetRegCmd(&cmd, sn, Sn_RX_RSR(sn), &(sockets[sn].registers.RX_RSR), 4);
+            generateGetRegCmd(&cmd, sn, Sn_RX_RSR(sn), (uint8_t*)sockets[sn].registers.RX_RSR, 4);
             cmd.cmd_type = CHECK_RCV;
             if (!queuePushBack(&command_queue, cmd)) {
                 enqueueFailsInISR++;

@@ -25,6 +25,15 @@ static dns_config_t g_dns_config = {0};
 static bool g_dns_initialized = false;
 static uint16_t g_transaction_id = 1;
 
+// Query and response buffers
+static uint8_t query_buffer[DNS_MAX_PACKET_SIZE];
+static uint8_t response_buffer[DNS_MAX_PACKET_SIZE];
+
+// Large working buffers to avoid stack overflow
+static char cname_buf[DNS_MAX_NAME_LENGTH + 1];
+static char current_name[DNS_MAX_NAME_LENGTH + 1];
+static dns_response_t dns_response;
+
 // Error strings for debugging
 static const char* dns_error_strings[] = {
     "Success",                      // DNS_OK
@@ -55,9 +64,12 @@ int8_t dns_init(dns_config_t* config)
         return DNS_ERROR_INVALID_PARAM;
     }
     
-    // Initialize socket for UDP
-    int8_t result = socket(g_dns_config.socket_num, Sn_MR_UDP, 0, 0);
-    if (result != g_dns_config.socket_num) {
+    // Initialize socket for UDP with random source port
+    uint16_t source_port = 50000 + (HAL_GetTick() % 10000); // Random port between 50000-59999
+    int result = socket(g_dns_config.socket_num, SOCKET_PROTOCOL_UDP, source_port,
+                       g_dns_config.tx_buf, g_dns_config.tx_buf_len,
+                       g_dns_config.rx_buf, g_dns_config.rx_buf_len, NULL);
+    if (result != SOCK_OK) {
         return DNS_ERROR_SOCKET_FAIL;
     }
     
@@ -352,7 +364,7 @@ int8_t _dns_parse_response(const uint8_t* buffer, uint16_t length, dns_response_
         // Parse type, class, TTL, and data length
         uint16_t type = (buffer[pos] << 8) | buffer[pos + 1];
         pos += 2;
-        uint16_t class = (buffer[pos] << 8) | buffer[pos + 1];
+        uint16_t rr_class = (buffer[pos] << 8) | buffer[pos + 1];
         pos += 2;
         uint32_t ttl = (buffer[pos] << 24) | (buffer[pos + 1] << 16) | (buffer[pos + 2] << 8) | buffer[pos + 3];
         pos += 4;
@@ -371,9 +383,8 @@ int8_t _dns_parse_response(const uint8_t* buffer, uint16_t length, dns_response_
             memcpy(response->answer.ip_addr, &buffer[pos], 4);
             response->has_answer = true;
         } else if (type == DNS_TYPE_CNAME && !response->has_cname) {
-            // Decode the CNAME target from RDATA
+            // Decode the CNAME target from RDATA (using static buffer to avoid stack overflow)
             uint16_t name_offset = pos;
-            char cname_buf[DNS_MAX_NAME_LENGTH + 1];
             int8_t dec_res = _dns_decode_name(buffer, length, &name_offset, cname_buf, sizeof(cname_buf));
             if (dec_res == DNS_OK) {
                 response->cname.type = type;
@@ -405,8 +416,6 @@ int8_t dns_query(const char* hostname, uint16_t qtype, dns_response_t* response)
         return DNS_ERROR_INVALID_PARAM;
     }
     
-    uint8_t query_buffer[DNS_MAX_PACKET_SIZE];
-    uint8_t response_buffer[DNS_MAX_PACKET_SIZE];
     uint16_t query_length;
     
     // Build query
@@ -418,9 +427,9 @@ int8_t dns_query(const char* hostname, uint16_t qtype, dns_response_t* response)
     // Send query with retries
     for (uint8_t retry = 0; retry <= g_dns_config.max_retries; retry++) {
         // Send query
-        int32_t sent = sendto(g_dns_config.socket_num, query_buffer, query_length, 
-                             g_dns_config.dns_server, DNS_PORT);
-        if (sent != query_length) {
+        int sent_result = sendto(g_dns_config.socket_num, query_buffer, query_length, 
+                                g_dns_config.dns_server, DNS_PORT);
+        if (sent_result != SOCK_OK) {
             if (retry == g_dns_config.max_retries) {
                 return DNS_ERROR_NETWORK;
             }
@@ -431,25 +440,22 @@ int8_t dns_query(const char* hostname, uint16_t qtype, dns_response_t* response)
         uint32_t start_time = HAL_GetTick();
         
         while ((HAL_GetTick() - start_time) < g_dns_config.timeout_ms) {
-            uint16_t received_size = getSn_RX_RSR(g_dns_config.socket_num);
+            uint8_t peer_ip[4];
+            uint16_t peer_port;
             
-            if (received_size > 0) {
-                uint8_t peer_ip[4];
-                uint16_t peer_port;
-                
-                int32_t recv_len = recvfrom(g_dns_config.socket_num, response_buffer, 
-                                          sizeof(response_buffer), peer_ip, &peer_port);
-                
-                if (recv_len > 0 && peer_port == DNS_PORT) {
-                    // Parse response
-                    result = _dns_parse_response(response_buffer, recv_len, response);
-                    if (result == DNS_OK) {
-                        return DNS_OK;
-                    }
+            // Try to receive response
+            uint32_t recv_len = recvfrom(g_dns_config.socket_num, response_buffer, 
+                                        sizeof(response_buffer), peer_ip, &peer_port);
+            
+            if (recv_len > 0 && peer_port == DNS_PORT) {
+                // Parse response
+                result = _dns_parse_response(response_buffer, recv_len, response);
+                if (result == DNS_OK) {
+                    return DNS_OK;
                 }
             }
             
-            osDelay(10); // Small delay to prevent busy waiting
+            osDelay(100); // Small delay to prevent busy waiting
         }
     }
     
@@ -466,29 +472,28 @@ int8_t dns_resolve_a(const char* hostname, uint8_t* ip_addr, uint32_t* ttl)
     }
     
     // Follow CNAME chains up to a reasonable depth to avoid loops
-    char current_name[DNS_MAX_NAME_LENGTH + 1];
+    // Use static buffer to avoid stack overflow
     strncpy(current_name, hostname, sizeof(current_name) - 1);
     current_name[sizeof(current_name) - 1] = '\0';
     
     const uint8_t max_depth = 5;
     for (uint8_t depth = 0; depth < max_depth; depth++) {
-        dns_response_t response;
-        int8_t result = dns_query(current_name, DNS_TYPE_A, &response);
+        int8_t result = dns_query(current_name, DNS_TYPE_A, &dns_response);
         if (result != DNS_OK) {
             return result;
         }
         
-        if (response.has_answer && response.answer.type == DNS_TYPE_A) {
-            memcpy(ip_addr, response.answer.ip_addr, 4);
+        if (dns_response.has_answer && dns_response.answer.type == DNS_TYPE_A) {
+            memcpy(ip_addr, dns_response.answer.ip_addr, 4);
             if (ttl != NULL) {
-                *ttl = response.answer.ttl;
+                *ttl = dns_response.answer.ttl;
             }
             return DNS_OK;
         }
         
-        if (response.has_cname && response.cname.cname[0] != '\0') {
+        if (dns_response.has_cname && dns_response.cname.cname[0] != '\0') {
             // Continue resolution with CNAME target
-            strncpy(current_name, response.cname.cname, sizeof(current_name) - 1);
+            strncpy(current_name, dns_response.cname.cname, sizeof(current_name) - 1);
             current_name[sizeof(current_name) - 1] = '\0';
             continue;
         }

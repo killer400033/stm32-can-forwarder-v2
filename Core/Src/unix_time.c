@@ -1,9 +1,9 @@
 #include "unix_time.h"
 #include "ntp_client.h"
-#include "w5500_driver.h"
 #include "dns_resolve.h"
 #include "cmsis_os.h"
 #include "log_handler.h"
+#include "w5500_setup.h"
 #include <time.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -18,6 +18,10 @@ volatile uint32_t seconds;
 static bool ntp_initialized = false;
 bool ntp_sync_successful = false;
 static bool ntp_dns_request_pending = false;
+
+// NTP socket buffers
+static uint8_t ntp_tx_buffer[1024];
+static uint8_t ntp_rx_buffer[1024];
 
 // DNS queue handle
 extern osMessageQueueId_t dnsReqQueueHandle;
@@ -172,7 +176,11 @@ static int8_t initNTPClient(const uint8_t* ntp_server_ip) {
 		.timeout_ms = 5000,
 		.max_retries = NTP_RETRY_CNT,
 		.socket_num = NTP_SOCKET,
-		.version = 4
+		.version = 4,
+		.tx_buf = ntp_tx_buffer,
+		.tx_buf_len = sizeof(ntp_tx_buffer),
+		.rx_buf = ntp_rx_buffer,
+		.rx_buf_len = sizeof(ntp_rx_buffer)
 	};
 
 	if (ntp_server_ip != NULL) {

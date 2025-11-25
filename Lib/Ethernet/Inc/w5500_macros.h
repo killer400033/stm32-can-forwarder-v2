@@ -62,6 +62,8 @@
 #define _W5500_SPI_FDM_OP_LEN2_     0x02
 #define _W5500_SPI_FDM_OP_LEN4_     0x03
 
+#define _WIZCHIP_SOCK_NUM_   8
+
 ///////////////////////////////////////
 // Definition For Legacy Chip Driver //
 ///////////////////////////////////////
@@ -205,42 +207,42 @@
  * - \ref MR_PPPOE      	: PPPoE mode
  * - \ref MR_FARP			: Force ARP mode
  */
-#define MR                 (_W5500_IO_BASE_ + (0x0000 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_MR           (_W5500_IO_BASE_ + (0x0000 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
  * @brief Gateway IP Register address(R/W)
  * @details @ref GAR configures the default gateway address.
  */
-#define GAR                (_W5500_IO_BASE_ + (0x0001 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_GAR          (_W5500_IO_BASE_ + (0x0001 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
  * @brief Subnet mask Register address(R/W)
  * @details @ref SUBR configures the subnet mask address.
  */
-#define SUBR               (_W5500_IO_BASE_ + (0x0005 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_SUBR         (_W5500_IO_BASE_ + (0x0005 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
  * @brief Source MAC Register address(R/W)
  * @details @ref SHAR configures the source hardware address.
  */
-#define SHAR               (_W5500_IO_BASE_ + (0x0009 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_SHAR         (_W5500_IO_BASE_ + (0x0009 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
  * @brief Source IP Register address(R/W)
  * @details @ref SIPR configures the source IP address.
  */
-#define SIPR               (_W5500_IO_BASE_ + (0x000F << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_SIPR         (_W5500_IO_BASE_ + (0x000F << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
  * @brief Set Interrupt low level timer register address(R/W)
  * @details @ref INTLEVEL configures the Interrupt Assert Time.
  */
-#define INTLEVEL           (_W5500_IO_BASE_ + (0x0013 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_INTLEVEL           (_W5500_IO_BASE_ + (0x0013 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
@@ -317,35 +319,35 @@
  * @brief PPP LCP Request Timer register  in PPPoE mode(R/W)
  * @details @ref PTIMER configures the time for sending LCP echo request. The unit of time is 25ms.
  */
-#define PTIMER             (_W5500_IO_BASE_ + (0x001C << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_PTIMER       (_W5500_IO_BASE_ + (0x001C << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
  * @brief PPP LCP Magic number register  in PPPoE mode(R/W)
  * @details @ref PMAGIC configures the 4bytes magic number to be used in LCP negotiation.
  */
-#define PMAGIC             (_W5500_IO_BASE_ + (0x001D << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_PMAGIC       (_W5500_IO_BASE_ + (0x001D << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
  * @brief PPP Destination MAC Register address(R/W)
  * @details @ref PHAR configures the PPPoE server hardware address that is acquired during PPPoE connection process.
  */
-#define PHAR                (_W5500_IO_BASE_ + (0x001E << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_PHAR         (_W5500_IO_BASE_ + (0x001E << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
  * @brief PPP Session Identification Register(R/W)
  * @details @ref PSID configures the PPPoE sever session ID acquired during PPPoE connection process.
  */
-#define PSID               (_W5500_IO_BASE_ + (0x0024 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_PSID         (_W5500_IO_BASE_ + (0x0024 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
  * @brief PPP Maximum Segment Size(MSS) register(R/W)
  * @details @ref PMRU configures the maximum receive unit of PPPoE.
  */
-#define PMRU               (_W5500_IO_BASE_ + (0x0026 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_PMRU         (_W5500_IO_BASE_ + (0x0026 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
@@ -354,7 +356,7 @@
  * which socket is not open and @ref UNREACH bit of @ref IR becomes and @ref UIPR & @ref UPORTR indicates
  * the destination IP address & port number respectively.
  */
-#define UIPR               (_W5500_IO_BASE_ + (0x0028 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_UIPR         (_W5500_IO_BASE_ + (0x0028 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
@@ -363,14 +365,14 @@
  * which socket is not open and @ref UNREACH bit of @ref IR becomes and @ref UIPR & @ref UPORTR
  * indicates the destination IP address & port number respectively.
  */
-#define UPORTR              (_W5500_IO_BASE_ + (0x002C << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_UPORTR       (_W5500_IO_BASE_ + (0x002C << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 /**
  * @ingroup Common_register_group
  * @brief PHY Status Register(R/W)
  * @details @ref PHYCFGR configures PHY operation mode and resets PHY. In addition, @ref PHYCFGR indicates the status of PHY such as duplex, Speed, Link.
  */
-#define PHYCFGR            (_W5500_IO_BASE_ + (0x002E << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_PHYCFGR      (_W5500_IO_BASE_ + (0x002E << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 // Reserved			         (_W5500_IO_BASE_ + (0x002F << 8) + (WIZCHIP_CREG_BLOCK << 3))
 // Reserved			         (_W5500_IO_BASE_ + (0x0030 << 8) + (WIZCHIP_CREG_BLOCK << 3))
@@ -388,7 +390,7 @@
  * @brief chip version register address(R)
  * @details @ref VERSIONR always indicates the W5500 version as @b 0x04.
  */
-#define VERSIONR           (_W5500_IO_BASE_ + (0x0039 << 8) + (WIZCHIP_CREG_BLOCK << 3))
+#define W5500_VERSIONR     (_W5500_IO_BASE_ + (0x0039 << 8) + (WIZCHIP_CREG_BLOCK << 3))
 
 
 //----------------------------- W5500 Socket Registers IOMAP -----------------------------

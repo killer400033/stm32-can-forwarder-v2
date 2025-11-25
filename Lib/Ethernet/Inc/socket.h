@@ -1,9 +1,29 @@
-#ifndef SOCKET_HPP
-#define SOCKET_HPP
+#ifndef SOCKET_H
+#define SOCKET_H
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "w5500.hpp"
+#include "wizchip_conf.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Socket protocol types (match Sn_MR register values)
+#define SOCKET_PROTOCOL_TCP     0x01
+#define SOCKET_PROTOCOL_UDP     0x02
+
+// Socket callback types
+typedef enum {
+    SOCKET_DISCON_REQ_CALLBACK = 0,
+    SOCKET_DISCON_SUC_CALLBACK = 1,
+    SOCKET_RECV_CALLBACK = 2,
+    SOCKET_TIMEOUT_CALLBACK = 3
+} socket_callback_type_t;
+
+// Socket callback function pointer
+typedef void (*socket_callback_t)(socket_callback_type_t type, void* data);
+
 
 // Error codes
 #define SOCK_OK                  0   // Success
@@ -16,28 +36,21 @@
 #define SOCKERR_TXBUF_TOO_SMALL -7  // Buffer is too small
 #define SOCKERR_BUFFERS_TOO_SMALL -8  // Buffer is too small
 
-// External socket array declaration
-extern socket_t sockets[_WIZCHIP_SOCK_NUM_];
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * @brief Initialize a socket with protocol and port
  * @warning **MUST NOT be called from interrupt context!** Uses blocking operations and taskENTER_CRITICAL().
  * @warning **MUST use tx_buf and rx_buf sizes that are at least 3 bytes larger than the respective WIZNET socket buffer sizes!**
  * @param sn Socket number (0-7)
- * @param protocol TCP or UDP protocol
+ * @param protocol TCP (0x01) or UDP (0x02) protocol (use SOCKET_PROTOCOL_TCP or SOCKET_PROTOCOL_UDP)
  * @param port Source port number
  * @param tx_buf Pointer to TX buffer for this socket
  * @param tx_buf_len Size of TX buffer
  * @param rx_buf Pointer to RX buffer for this socket
  * @param rx_buf_len Size of RX buffer
- * @param callback Callback function for socket events
+ * @param callback Callback function for socket events (or NULL if not used)
  * @return SOCK_OK (0) on success, negative error code otherwise
  */
-int socket(uint8_t sn, socket_protocol_t protocol, uint16_t port, uint8_t* tx_buf, uint16_t tx_buf_len, uint8_t* rx_buf, uint16_t rx_buf_len, socket_callback_t callback=NULL);
+int socket(uint8_t sn, uint8_t protocol, uint16_t port, uint8_t* tx_buf, uint16_t tx_buf_len, uint8_t* rx_buf, uint16_t rx_buf_len, socket_callback_t callback);
 
 /**
  * @brief Connect to a destination (TCP only - sets destination IP and port, then initiates connection)
@@ -113,4 +126,4 @@ uint32_t recvfrom(uint8_t sn, uint8_t* buf, uint16_t len, uint8_t* addr, uint16_
 }
 #endif
 
-#endif // SOCKET_HPP
+#endif // SOCKET_H

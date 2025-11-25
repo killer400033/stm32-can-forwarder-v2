@@ -12,14 +12,13 @@
 #ifndef _NTP_CLIENT_H_
 #define _NTP_CLIENT_H_
 
-#include <stdint.h>
-#include <stdbool.h>
-#include "socket.h"
-#include "wizchip_conf.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdint.h>
+#include <stdbool.h>
+#include "socket.h"
 
 // NTP Constants
 #define NTP_PORT                    123         ///< Standard NTP port
@@ -105,6 +104,10 @@ typedef struct {
     uint8_t max_retries;            ///< Maximum number of retries
     uint8_t socket_num;             ///< Socket number to use for NTP queries
     uint8_t version;                ///< NTP version (default: 4)
+    uint8_t* tx_buf;                ///< Transmit buffer for socket
+    uint16_t tx_buf_len;            ///< Transmit buffer length
+    uint8_t* rx_buf;                ///< Receive buffer for socket
+    uint16_t rx_buf_len;            ///< Receive buffer length
 } ntp_config_t;
 
 /**

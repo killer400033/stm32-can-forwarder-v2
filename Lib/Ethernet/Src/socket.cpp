@@ -1,10 +1,9 @@
 #include <cstring>
-#include "socket.hpp"
-#include "w5500.hpp"
+#include "socket.h"
 #include "cmsis_os.h"
 #include "main.h"
-
-socket_t sockets[_WIZCHIP_SOCK_NUM_] = {0};
+#include "w5500.hpp"
+#include "queue.hpp"
 
 /**
  * @brief Initialize a socket with protocol and port
@@ -20,7 +19,7 @@ socket_t sockets[_WIZCHIP_SOCK_NUM_] = {0};
  * @param callback Callback function for socket events
  * @return SOCK_OK (0) on success, negative error code otherwise
  */
-int socket(uint8_t sn, socket_protocol_t protocol, uint16_t port, uint8_t* tx_buf, uint16_t tx_buf_len, uint8_t* rx_buf, uint16_t rx_buf_len, socket_callback_t callback=NULL) {
+int socket(uint8_t sn, uint8_t protocol, uint16_t port, uint8_t* tx_buf, uint16_t tx_buf_len, uint8_t* rx_buf, uint16_t rx_buf_len, socket_callback_t callback) {
     if (sn >= _WIZCHIP_SOCK_NUM_) {
         return SOCKERR_INVALID_PARAM;
     }

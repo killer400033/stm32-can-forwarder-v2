@@ -12,14 +12,13 @@
 #ifndef _DNS_CLIENT_H_
 #define _DNS_CLIENT_H_
 
-#include <stdint.h>
-#include <stdbool.h>
-#include "socket.h"
-#include "wizchip_conf.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdint.h>
+#include <stdbool.h>
+#include "socket.h"
 
 // DNS Constants
 #define DNS_PORT                    53          ///< Standard DNS port
@@ -126,6 +125,10 @@ typedef struct {
     uint16_t timeout_ms;                    ///< Timeout in milliseconds
     uint8_t max_retries;                    ///< Maximum number of retries
     uint8_t socket_num;                     ///< Socket number to use for DNS queries
+    uint8_t* tx_buf;                        ///< TX buffer for socket (must be at least DNS_MAX_PACKET_SIZE + 3 bytes)
+    uint16_t tx_buf_len;                    ///< TX buffer length
+    uint8_t* rx_buf;                        ///< RX buffer for socket (must be at least DNS_MAX_PACKET_SIZE + 3 bytes)
+    uint16_t rx_buf_len;                    ///< RX buffer length
 } dns_config_t;
 
 /**

@@ -3,15 +3,17 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "main.h"  // For SPI_HandleTypeDef and GPIO_TypeDef
 #include "queue.hpp"
-#include "w5500.h"
+#include "socket.h"
 
 #define COMMAND_QUEUE_SIZE 100
 #define SOCKET_QUEUE_SIZE 15
 #define COMMAND_BUFFER_SIZE 10
+#define MAX_SOCK_NUM _WIZCHIP_SOCK_NUM_  // Maximum number of sockets
 
 #define MAC_ADDRESS { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED }
-#define INTLEVEL 0x0000
+#define INT_LEVEL 0x0000
 #define RETRY_TIME 1000 // Retry time in milliseconds
 #define RETRY_COUNT 5 // Retry count
 #define KEEP_ALIVE_TIMER 15 // Keep-alive timer in seconds (set to 0 to disable)
@@ -19,20 +21,6 @@
 // Helper macros to convert 2-byte big-endian arrays to uint16_t
 #define GET_U16(arr) ((uint16_t)((arr)[0] << 8) | (arr)[1])
 #define SET_U16(arr, val) do { (arr)[0] = ((val) >> 8) & 0xFF; (arr)[1] = (val) & 0xFF; } while(0)
-
-typedef enum {
-    SOCKET_DISCON_REQ_CALLBACK = 0,
-    SOCKET_DISCON_SUC_CALLBACK = 1,
-    SOCKET_RECV_CALLBACK = 2,
-    SOCKET_TIMEOUT_CALLBACK = 3
-} socket_callback_type_t;
-
-typedef void (*socket_callback_t)(socket_callback_type_t type, void* arg);
-
-typedef enum {
-    SOCKET_PROTOCOL_TCP = Sn_MR_TCP,
-    SOCKET_PROTOCOL_UDP = Sn_MR_UDP
-} socket_protocol_t;
 
 typedef enum {
     WRITE_REG = 0, // Write max 4 bytes to WIZNET
@@ -138,6 +126,8 @@ typedef struct socket_t {
     bool is_receiving;        // Is currently receiving data
 } socket_t;
 
+extern socket_t sockets[_WIZCHIP_SOCK_NUM_];
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -188,7 +178,6 @@ void wiznetSPITxCompleteCallback(void);
 // W5500 low-level functions
 bool enqueueSetReg(uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len);
 bool enqueueGetReg(uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
-void generateSetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len);
 int pollRegNoIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false, uint16_t timeout=2000);
 int pollRegWithIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false);
 int16_t getTXBufferIndex(socket_t* socket, uint16_t len);

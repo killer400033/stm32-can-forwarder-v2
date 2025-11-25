@@ -2,11 +2,11 @@
 #include "cmsis_os.h"
 #include "dns_client.h"
 #include "log_handler.h"
+#include "w5500_setup.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <w5500_driver.h>
 
 void dnsResolveThread(void *argument);
 
@@ -20,12 +20,20 @@ const osThreadAttr_t dnsResolveTask_attributes = {
 // Queue handle - will be created externally
 extern osMessageQueueId_t dnsReqQueueHandle;
 
+// DNS socket buffers
+static uint8_t dns_tx_buffer[1024];
+static uint8_t dns_rx_buffer[1024];
+
 void initDNSResolve() {
     dns_config_t config = {
         .dns_server = {8, 8, 8, 8},
         .timeout_ms = 5000,
         .max_retries = 3,
-        .socket_num = DNS_SOCKET
+        .socket_num = DNS_SOCKET,
+        .tx_buf = dns_tx_buffer,
+        .tx_buf_len = sizeof(dns_tx_buffer),
+        .rx_buf = dns_rx_buffer,
+        .rx_buf_len = sizeof(dns_rx_buffer)
     };
 
     int8_t result = dns_init(&config);
