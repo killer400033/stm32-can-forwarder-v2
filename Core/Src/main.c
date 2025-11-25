@@ -1173,6 +1173,24 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
+	if (hspi->Instance == wiznet_hspi1->Instance) {
+		wiznetSPITxRxCompleteCallback();
+	}
+}
+
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) {
+	if (hspi->Instance == wiznet_hspi1->Instance) {
+		wiznetSPITxCompleteCallback();
+	}
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+	if (GPIO_Pin == WIZNET_INT_Pin) {
+		wiznetInterruptCallback();
+	}
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -1192,7 +1210,7 @@ void StartDefaultTask(void *argument)
   initStorage();
 
   // Initialize W5500
-  W5500Init();
+  W5500Init(&hspi1);
 
   // Initialize DNS Thread
   initDNSResolve();
@@ -1201,7 +1219,7 @@ void StartDefaultTask(void *argument)
   initTime(&htim2);
 
   // Begin application layer thread
-  initAppLayer();
+  //initAppLayer();
 
   // Initialize and start FDCAN peripherals
   initCAN();

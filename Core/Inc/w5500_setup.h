@@ -8,6 +8,8 @@
 extern "C" {
 #endif
 
+extern SPI_HandleTypeDef *wiznet_hspi1;
+
 // Socket assignments
 #define DHCP_SOCKET     0
 #define DNS_SOCKET      1
@@ -25,7 +27,7 @@ typedef struct {
 /**
  * @brief Initialize W5500 chip
  */
-void W5500Init(void);
+void W5500Init(SPI_HandleTypeDef *hspi1);
 
 #ifdef __cplusplus
 }

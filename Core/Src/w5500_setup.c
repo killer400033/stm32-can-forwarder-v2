@@ -6,24 +6,27 @@
 #include "log_handler.h"
 #include "socket.h"
 
-extern SPI_HandleTypeDef hspi1;
+SPI_HandleTypeDef *wiznet_hspi1;
 
 // Default network configuration
 wiz_NetInfo net_info = {
-    .ip = {10, 0, 0, 69},
+    //.ip = {10, 0, 0, 69},
+		//.gw = {10, 0, 0, 1},
+		.ip = {192, 168, 137, 100},
+		.gw = {192, 168, 137, 1},
     .sn = {255, 255, 255, 0},
-    .gw = {10, 0, 0, 1},
 };
 
 /**
  * @brief Initialize W5500 chip with new driver
  */
-void W5500Init(void) {
+void W5500Init(SPI_HandleTypeDef *hspi1) {
+		wiznet_hspi1 = hspi1;
     // Small delay for chip power-up
     osDelay(500);
     
     // Step 1: Configure hardware (SPI and CS pin)
-    int result = setWiznetHardware(&hspi1, SPI1_CS_GPIO_Port, SPI1_CS_Pin);
+    int result = setWiznetHardware(wiznet_hspi1, SPI1_CS_GPIO_Port, SPI1_CS_Pin);
     if (result != SOCK_OK) {
         log_msg(LL_ERR, "Failed to set W5500 hardware");
     }

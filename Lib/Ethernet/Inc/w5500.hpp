@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "main.h"  // For SPI_HandleTypeDef and GPIO_TypeDef
 #include "queue.hpp"
 #include "socket.h"
 
@@ -131,30 +130,6 @@ extern socket_t sockets[_WIZCHIP_SOCK_NUM_];
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/**
- * @brief Configure W5500 hardware (SPI and CS pin)
- * @warning Must be called before initWizchip()
- * @param hspi SPI handle for W5500 communication
- * @param cs_port GPIO port for CS pin (e.g., GPIOA)
- * @param cs_pin GPIO pin for CS (e.g., GPIO_PIN_4)
- * @return SOCK_OK (0) on success, SOCKERR_INVALID_PARAM if parameters are invalid
- */
-int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t cs_pin);
-
-/**
- * @brief Initialize W5500 chip with network configuration
- * @warning **MUST NOT be called from interrupt context!** Uses blocking operations, osDelay(), and taskENTER_CRITICAL().
- * @warning Must call setWiznetHardware() before calling this function
- * @param ip_address IP address (4 bytes)
- * @param subnet_mask Subnet mask (4 bytes)
- * @param gateway_ip Gateway IP address (4 bytes)
- * @param rx_buf_sizes RX buffer sizes for all 8 sockets (in KB)
- * @param tx_buf_sizes TX buffer sizes for all 8 sockets (in KB)
- * @return SOCK_OK (0) on success, negative error code otherwise
- */
-int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip, 
-                const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes);
 
 /**
  * @brief WIZNET W5500 interrupt callback

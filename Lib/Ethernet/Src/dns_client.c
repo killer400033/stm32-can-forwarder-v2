@@ -364,7 +364,7 @@ int8_t _dns_parse_response(const uint8_t* buffer, uint16_t length, dns_response_
         // Parse type, class, TTL, and data length
         uint16_t type = (buffer[pos] << 8) | buffer[pos + 1];
         pos += 2;
-        uint16_t rr_class = (buffer[pos] << 8) | buffer[pos + 1];
+        //uint16_t rr_class = (buffer[pos] << 8) | buffer[pos + 1];
         pos += 2;
         uint32_t ttl = (buffer[pos] << 24) | (buffer[pos + 1] << 16) | (buffer[pos + 2] << 8) | buffer[pos + 3];
         pos += 4;

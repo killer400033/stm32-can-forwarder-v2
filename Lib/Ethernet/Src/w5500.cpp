@@ -610,7 +610,7 @@ void receivePendingData(uint8_t sn) {
     if (rx_rsr > 0) {
         command_t cmd;
 
-        uint32_t rx_buf_index = getRXBufferIndex(&sockets[sn], rx_rsr + 3);
+        int32_t rx_buf_index = getRXBufferIndex(&sockets[sn], rx_rsr + 3);
         if (rx_buf_index != -1) {
             sockets[sn].is_receiving = true;
 
