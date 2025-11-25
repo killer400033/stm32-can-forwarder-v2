@@ -603,7 +603,7 @@ void sendPendingData(uint8_t sn) {
         }
 
         uint8_t new_tx_wr_bytes[2];
-        SET_U16(new_tx_wr_bytes, tx_wr + len);
+        SET_U16(new_tx_wr_bytes, tx_wr + len - 3);
         generateSetRegCmd(&cmd, sn, Sn_TX_WR(sn), new_tx_wr_bytes, 2);
         if (!queuePushBack(&command_queue, cmd)) {
             enqueueFailsInISR++;
@@ -637,9 +637,8 @@ void receivePendingData(uint8_t sn) {
                 enqueueFailsInISR++;
             }
 
-            uint16_t new_rx_rd = rx_rd + rx_rsr;
             uint8_t rx_rd_bytes[2];
-            SET_U16(rx_rd_bytes, new_rx_rd);
+            SET_U16(rx_rd_bytes, rx_rd + rx_rsr);
             generateSetRegCmd(&cmd, sn, Sn_RX_RD(sn), rx_rd_bytes, 2);
             if (!queuePushBack(&command_queue, cmd)) {
                 enqueueFailsInISR++;
