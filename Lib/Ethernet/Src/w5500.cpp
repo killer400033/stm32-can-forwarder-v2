@@ -198,7 +198,7 @@ bool enqueueGetReg(uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len) {
  * @return SOCK_OK on success, SOCKERR_TIMEOUT on timeout, SOCKERR_QUEUE_FULL on register read error
  */
 int pollRegNoIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv, uint16_t timeout) {
-    uint16_t start_time = osKernelGetTickCount();
+    uint32_t start_time = osKernelGetTickCount();
     while (osKernelGetTickCount() - start_time < timeout && (*reg != val) ^ inv) {
         if (!enqueueGetReg(sn, addr, reg, 1)) {
             return SOCKERR_QUEUE_FULL;
@@ -217,7 +217,7 @@ int pollRegNoIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv,
  * @return SOCK_OK on success, SOCKERR_TIMEOUT on timeout
  */
 int pollRegWithIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv) {
-    uint16_t start_time = osKernelGetTickCount();
+    uint32_t start_time = osKernelGetTickCount();
     // IT based polling should never timeout, but just in case communication is lost, we will timeout after 60 seconds
     while (osKernelGetTickCount() - start_time < 60000 && (*reg != val) ^ inv) {
         osDelay(100);
@@ -437,6 +437,7 @@ static void dmaTXCompleteCallback(void) {
             break;
         case READ_SOC:
         		HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.ptr, running_cmd.ptr, running_cmd.len);
+        		break;
         case CHECK_RCV:
             HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
             break;
@@ -528,9 +529,21 @@ static void dmaRXCompleteCallback(void) {
             }
 
             if (socket->registers.IR & Sn_IR_TIMEOUT) {
-                // Clear sending state
+                uint32_t isrm_timeout = taskENTER_CRITICAL_FROM_ISR();
+                buffer_segment_t segment;
+
+                // This is only relevant in UDP mode, because in TCP mode, the socket is closed when the timeout occurs and reopening will wipe the queue
+                queuePopFront(&socket->tx_buf_queue, &segment);
                 socket->is_sending = false;
-                // Timeout occurred, socket is closed
+
+                // In UDP mode, the socket remains open, so we will send the next pending data
+                if (socket->registers.MR & Sn_MR_UDP) {
+                    sendPendingData(running_cmd.sn);
+                }
+
+                taskEXIT_CRITICAL_FROM_ISR(isrm_timeout);
+
+                // Timeout occurred, inform upper layer
                 if (socket->callback != NULL) {
                     socket->callback(SOCKET_TIMEOUT_CALLBACK, NULL);
                 }

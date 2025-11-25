@@ -14,6 +14,16 @@ extern "C" {
 #define SOCKET_PROTOCOL_TCP     0x01
 #define SOCKET_PROTOCOL_UDP     0x02
 
+typedef enum {
+    SOCKET_CLOSED,
+    SOCKET_INIT,
+    SOCKET_LISTEN,
+    SOCKET_ESTABLISHED,
+    SOCKET_CLOSE_WAIT,
+    SOCKET_UDP,
+    SOCKET_OTHER, // Used for all other socket statuses, (which aren't relevant to the user)
+} socket_status_t;
+
 // Socket callback types
 typedef enum {
     SOCKET_DISCON_REQ_CALLBACK = 0,
@@ -122,6 +132,13 @@ uint32_t recv(uint8_t sn, uint8_t* buf, uint16_t len);
  * @return Number of bytes received (data only, excluding header), 0 if no data available
  */
 uint32_t recvfrom(uint8_t sn, uint8_t* buf, uint16_t len, uint8_t* addr, uint16_t* port);
+
+/**
+ * @brief Get the status of a socket
+ * @param sn Socket number (0-7)
+ * @return Socket status
+ */
+socket_status_t getSocketStatus(uint8_t sn);
 
 #ifdef __cplusplus
 }

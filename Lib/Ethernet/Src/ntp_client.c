@@ -405,11 +405,10 @@ uint8_t ntp_get_max_retries(void)
  */
 int8_t ntp_close(void)
 {
-    if (g_ntp_initialized) {
-        close(g_ntp_config.socket_num);
-        g_ntp_initialized = false;
+    if (close(g_ntp_config.socket_num) != SOCK_OK) {
+    	return NTP_ERROR_SOCKET_FAIL;
     }
-    
+
     return NTP_OK;
 }
 

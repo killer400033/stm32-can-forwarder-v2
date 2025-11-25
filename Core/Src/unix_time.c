@@ -20,8 +20,8 @@ bool ntp_sync_successful = false;
 static bool ntp_dns_request_pending = false;
 
 // NTP socket buffers
-static uint8_t ntp_tx_buffer[1024];
-static uint8_t ntp_rx_buffer[1024];
+static uint8_t ntp_tx_buffer[1024 + 3];
+static uint8_t ntp_rx_buffer[1024 + 3];
 
 // DNS queue handle
 extern osMessageQueueId_t dnsReqQueueHandle;
@@ -86,6 +86,7 @@ void ntpSyncThread(void *argument) {
 		}
 
 		if (ntp_sync_successful) {
+			ntp_close();
 			log_msg(LL_DBG, "NTP sync successful, terminating NTP sync thread");
 			osThreadExit();
 		}

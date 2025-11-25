@@ -235,9 +235,10 @@ int send(uint8_t sn, uint8_t* buf, uint16_t len) {
 
         if (success) {
             memcpy(sockets[sn].tx_buf + write_index + 3, buf, len);
-            sendPendingData(sn);
         }
     }
+
+    sendPendingData(sn);
 
     taskEXIT_CRITICAL();
 
@@ -292,9 +293,10 @@ int sendto(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t *addr, uint16_t port
 
         if (success) {
             memcpy(sockets[sn].tx_buf + write_index + 3, buf, len);
-            sendPendingData(sn);
         }
     }
+
+    sendPendingData(sn);
 
     taskEXIT_CRITICAL();
 
@@ -432,4 +434,31 @@ uint32_t recvfrom(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t * addr, uint1
     taskEXIT_CRITICAL();
     
     return data_copied;
+}
+
+/**
+ * @brief Get the status of a socket
+ * @param sn Socket number (0-7)
+ * @return Socket status
+ */
+socket_status_t getSocketStatus(uint8_t sn) {
+    if (sn >= _WIZCHIP_SOCK_NUM_) {
+        return SOCKET_OTHER;
+    }
+    
+    switch (sockets[sn].registers.SR) {
+        case SOCK_CLOSED:
+            return SOCKET_CLOSED;
+        case SOCK_INIT:
+            return SOCKET_INIT;
+        case SOCK_LISTEN:
+            return SOCKET_LISTEN;
+        case SOCK_ESTABLISHED:
+            return SOCKET_ESTABLISHED;
+        case SOCK_CLOSE_WAIT:
+            return SOCKET_CLOSE_WAIT;
+        case SOCK_UDP:
+            return SOCKET_UDP;
+    }
+    return SOCKET_OTHER;
 }

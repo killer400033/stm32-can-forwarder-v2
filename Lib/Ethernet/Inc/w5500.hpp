@@ -32,7 +32,7 @@ typedef enum {
 } command_type_t;
 
 typedef struct {
-    command_type_t cmd_type;
+    volatile command_type_t cmd_type;
     uint8_t sn;
     uint8_t inline_buf[COMMAND_BUFFER_SIZE];
     uint8_t *ptr;
