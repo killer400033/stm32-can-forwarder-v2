@@ -1261,22 +1261,28 @@ void StartDefaultTask(void *argument)
   // Initialize ADC Scanner with TIM7
   ADC_Scanner_Init(&htim7);
 
-  CanFrame canDataReceived;
+  CanFrame canDataReceived = {0};
+  canDataReceived.can_bus = 2;
+  canDataReceived.can_id = 750;
+  canDataReceived.timestamp = getUnixTimeNanoseconds();
+
 
   for(;;) {
 		// Process messages from canRecQueue and distribute to other queues
-		osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever);
-		if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
+		//osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever);
+		while (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
 			osMessageQueuePut(wsCanQueueHandle, &canDataReceived, 0, 0);
 		}
-		else {
+		/*else {
 			if (osMessageQueueGetSpace(storageCanQueueHandle) > 0) {
 				osMessageQueuePut(storageCanQueueHandle, &canDataReceived, 0, 0);
 			}
 			else {
 				dropped_packets++;
 			}
-		}
+
+		}*/
+		osThreadYield();
   }
   /* USER CODE END 5 */
 }

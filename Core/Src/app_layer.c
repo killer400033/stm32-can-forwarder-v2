@@ -22,12 +22,20 @@ const osThreadAttr_t appLayerTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
+// Maximum number of CAN frames to send in one websocket packet
+#define MAX_CAN_FRAME_CNT 5
+
+typedef struct CanFrameList {
+    CanFrame canFrames[MAX_CAN_FRAME_CNT];
+    uint8_t count;
+} CanFrameList_t;
+
 // WebSocket tx buffer union
 typedef union {
-    uint8_t full[WS_MAX_HEADER_LEN + 512];  // Full buffer
+    uint8_t full[WS_MAX_HEADER_LEN + 1024];  // Full buffer
     struct {
         uint8_t header_space[WS_MAX_HEADER_LEN];  // Reserved for WebSocket header
-        uint8_t data[512];                          // Payload data
+        uint8_t data[1024];                       // Payload data
     };
 } ws_send_buffer_t;
 
@@ -37,10 +45,6 @@ static CanFrameList_t canFrameList = {0};
 // WebSocket TX/RX buffers for socket API
 static uint8_t ws_tx_buf[4096+3];
 static uint8_t ws_rx_buf[1024+3];
-
-// WebSocket RX buffer from WebSocket client
-uint8_t recv_buf[256];
-uint16_t recv_len = sizeof(recv_buf);
 
 void appLayerThread(void *argument);
 static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *canFrames);
@@ -77,7 +81,6 @@ static void dnsResolveCallback(const uint8_t* ip_addr, uint32_t ttl, bool succes
 // Main thread that runs
 void appLayerThread(void *argument) {
 	uint32_t prev_time = osKernelGetTickCount();
-	uint32_t prev_cnt = 0;
 	uint32_t cnt = 0;
 	bool connected = false;
 
@@ -121,10 +124,8 @@ void appLayerThread(void *argument) {
 			ws_client_init(&ws_config);
 		}
 
-		ws_state_t ws_state = ws_client_get_state();
-
 		// Attempt to connect if disconnected
-		if (ws_state == WS_STATE_DISCONNECTED || ws_state == WS_STATE_ERROR) {
+		if (ws_client_get_state() == WS_STATE_DISCONNECTED) {
 			int result = ws_client_connect();
 			if (result != WS_OK) {
 				log_msg(LL_WRN, "WebSocket connection failed: %d", result);
@@ -132,34 +133,22 @@ void appLayerThread(void *argument) {
 			}
 		}
 
+		// Process WebSocket
+		ws_opcode_t opcode;
+		ws_client_process(NULL, 0, &opcode);
+
 		// Handle state transitions
-		if (ws_state == WS_STATE_CONNECTED && !connected) {
+		if (ws_client_get_state() == WS_STATE_CONNECTED && !connected) {
 			log_msg(LL_DBG, "WebSocket connected!");
 			connected = true;
 		}
-		if ((ws_state == WS_STATE_DISCONNECTED || ws_state == WS_STATE_ERROR) && connected) {
+		if ((ws_client_get_state() == WS_STATE_DISCONNECTED) && connected) {
 			log_msg(LL_WRN, "WebSocket disconnected...");
 			connected = false;
 		}
 
-		// Process WebSocket (handles callbacks, state updates, receives data)
-		ws_opcode_t opcode;
-		int8_t proc_result = ws_client_process(recv_buf, &recv_len, &opcode);
-		
-		if (proc_result < 0) {
-			// Error occurred
-			if (proc_result == WS_ERR_TIMEOUT) {
-				log_msg(LL_WRN, "WebSocket timeout");
-			} else if (proc_result == WS_ERR_DISCONNECTED) {
-				log_msg(LL_DBG, "WebSocket disconnected gracefully");
-			}
-		} else if (proc_result > 0) {
-			// Data received (not currently used, but available)
-			log_msg(LL_DBG, "WS RX: %d bytes, opcode: %d", recv_len, opcode);
-		}
-
 		// Send data if connected
-		if (ws_state == WS_STATE_CONNECTED) {
+		if (ws_client_get_state() == WS_STATE_CONNECTED) {
 			// Collect CAN frames from queue
 			while (osMessageQueueGetCount(wsCanQueueHandle) > 0 && canFrameList.count < MAX_CAN_FRAME_CNT) {
 				osMessageQueueGet(wsCanQueueHandle, &(canFrameList.canFrames[canFrameList.count++]), 0, 0);
@@ -171,23 +160,19 @@ void appLayerThread(void *argument) {
 
 				// Send data over WebSocket (function will write header in header_space)
 				if (msg_length > 0) {
-					int16_t sent = ws_client_send_binary(ws_send_buf.data, (uint16_t)msg_length);
-					if (sent < 0) {
-						log_msg(LL_ERR, "WebSocket send failed: %d", sent);
-					} else {
+					if (ws_client_send_binary(ws_send_buf.data, (uint16_t)msg_length) > 0) {
 						cnt += canFrameList.count;
+						canFrameList.count = 0;
 					}
 				}
-				
-				canFrameList.count = 0;
 			}
 		}
 
 		// Throughput measuring
 		if (osKernelGetTickCount() - prev_time > 10000) {
-			uint32_t speed = (cnt - prev_cnt) * sizeof(CanFrame) / 10;
+			uint32_t speed = cnt * sizeof(CanFrame) / 10;
 			prev_time = osKernelGetTickCount();
-			prev_cnt = cnt;
+			cnt = 0;
 			log_msg(LL_DBG, "Websocket: %ld B/s", speed);
 		}
 

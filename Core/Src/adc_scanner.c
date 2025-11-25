@@ -81,21 +81,13 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 	CanFrame frame = {0};
 	frame.can_bus = SENSOR_BUS;
 	frame.timestamp = getUnixTimeNanoseconds();
-	float sensor_voltage;
 
 	// Create CAN frame for coolant and oil temperature sensors (CAN ID 910)
 	CANHUB_TEMP_SENSORS_t tempMsg = {0};
-	sensor_voltage = ((float)adc1_dma_buffer[2] * 3.3f) / 4095.0f;
-	tempMsg.OilTempSensorLeft = -0.0258f * sensor_voltage + 2.8204f;
-
-	sensor_voltage = ((float)adc1_dma_buffer[3] * 3.3f) / 4095.0f;
-	tempMsg.OilTempSensorRight = -0.0258f * sensor_voltage + 2.8204f;
-
-	sensor_voltage = ((float)adc1_dma_buffer[4] * 3.3f) / 4095.0f;
-	tempMsg.CoolingTempSensorLeft = -0.0262f * sensor_voltage + 2.8474f;
-
-	sensor_voltage = ((float)adc2_dma_buffer[2] * 3.3f) / 4095.0f;
-	tempMsg.CoolingTempSensorRight = -0.0262f * sensor_voltage + 2.8474f;
+	tempMsg.OilTempSensorLeft = ((float)adc1_dma_buffer[2] * 3.3f) / 4095.0f;
+	tempMsg.OilTempSensorRight = ((float)adc1_dma_buffer[3] * 3.3f) / 4095.0f;
+	tempMsg.CoolingTempSensorLeft = ((float)adc1_dma_buffer[4] * 3.3f) / 4095.0f;
+	tempMsg.CoolingTempSensorRight = ((float)adc2_dma_buffer[2] * 3.3f) / 4095.0f;
 
 	if (Pack_CANHUB_TEMP_SENSORS(&tempMsg, frame.can_data, 8) == STATUS_OK) {
 		frame.can_id = 910;

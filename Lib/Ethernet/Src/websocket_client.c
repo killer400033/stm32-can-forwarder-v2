@@ -15,6 +15,7 @@ static bool g_ws_initialized = false;
 static volatile bool g_timeout_flag = false;
 static volatile bool g_disconnect_req_flag = false;
 static volatile bool g_disconnect_suc_flag = false;
+static uint32_t g_close_time = 0;
 
 // Working buffers
 static uint8_t ws_rx_temp[1024];  // Temporary buffer for receiving frames (Make sure this is large enough for largest packet from server, otherwise it won't receive anything)
@@ -27,10 +28,22 @@ static int8_t ws_parse_handshake_response(const char *response);
 static uint16_t ws_create_frame_header(uint8_t *buffer, ws_opcode_t opcode, uint16_t payload_len, bool mask, uint8_t *masking_key);
 static void ws_mask_payload(uint8_t *payload, uint16_t len, const uint8_t *mask);
 static void ws_socket_callback(socket_callback_type_t type, void* data);
-static int8_t ws_process_internal(uint8_t* buffer, uint16_t* len, ws_opcode_t* opcode);
+static int8_t ws_process_internal(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode);
+static inline void ws_generate_masking_key(uint8_t *masking_key);
 
 // Base64 encoding table
 static const char base64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/**
+ * @brief Generate 4-byte masking key from 32-bit random value
+ */
+static inline void ws_generate_masking_key(uint8_t *masking_key) {
+    uint32_t rand_val = ws_rand();
+    masking_key[0] = (rand_val >> 24) & 0xFF;
+    masking_key[1] = (rand_val >> 16) & 0xFF;
+    masking_key[2] = (rand_val >> 8) & 0xFF;
+    masking_key[3] = rand_val & 0xFF;
+}
 
 /**
  * @brief Initialize WebSocket client
@@ -86,15 +99,13 @@ int8_t ws_client_connect(void) {
                           g_ws_config.tx_buf, g_ws_config.tx_buf_len, 
                           g_ws_config.rx_buf, g_ws_config.rx_buf_len, ws_socket_callback);
     if (result != SOCK_OK) {
-        g_ws_state = WS_STATE_ERROR;
+        g_ws_state = WS_STATE_DISCONNECTED;
         return WS_ERR_SOCKET_FAIL;
     }
     
-    // Connect to server
-    g_ws_state = WS_STATE_CONNECTING;
     result = connect(g_ws_config.socket_num, g_ws_config.host, g_ws_config.port);
     if (result != SOCK_OK) {
-        g_ws_state = WS_STATE_ERROR;
+        g_ws_state = WS_STATE_DISCONNECTED;
         close(g_ws_config.socket_num);
         return WS_ERR_CONNECT_FAIL;
     }
@@ -119,12 +130,10 @@ int8_t ws_client_connect(void) {
     
     int32_t sent = send(g_ws_config.socket_num, (uint8_t*)handshake, strlen(handshake));
     if (sent != SOCK_OK) {
-        g_ws_state = WS_STATE_ERROR;
+        g_ws_state = WS_STATE_DISCONNECTED;
         close(g_ws_config.socket_num);
         return WS_ERR_SOCKET_FAIL;
     }
-    
-    g_ws_state = WS_STATE_HANDSHAKE;
     
     // Wait for handshake response (with timeout)
     uint32_t start_time = HAL_GetTick();
@@ -143,7 +152,7 @@ int8_t ws_client_connect(void) {
                     g_ws_state = WS_STATE_CONNECTED;
                     return WS_OK;
                 } else {
-                    g_ws_state = WS_STATE_ERROR;
+                    g_ws_state = WS_STATE_DISCONNECTED;
                     close(g_ws_config.socket_num);
                     return WS_ERR_HANDSHAKE_FAIL;
                 }
@@ -153,7 +162,7 @@ int8_t ws_client_connect(void) {
     }
     
     // Timeout
-    g_ws_state = WS_STATE_ERROR;
+    g_ws_state = WS_STATE_DISCONNECTED;
     close(g_ws_config.socket_num);
     return WS_ERR_TIMEOUT;
 }
@@ -174,18 +183,9 @@ int16_t ws_client_send_binary(uint8_t* buffer, uint16_t payload_len) {
         return WS_ERR_WRONG_STATE;
     }
     
-    // Check socket status
-    socket_status_t status = getSocketStatus(g_ws_config.socket_num);
-    if (status != SOCKET_ESTABLISHED) {
-        g_ws_state = WS_STATE_ERROR;
-        return WS_ERR_DISCONNECTED;
-    }
-    
-    // Generate masking key
+    // Generate masking key (uses full 32-bit random value)
     uint8_t masking_key[4];
-    for (int i = 0; i < 4; i++) {
-        masking_key[i] = (uint8_t)(ws_rand() & 0xFF);
-    }
+    ws_generate_masking_key(masking_key);
     
     // Calculate header size
     uint16_t header_len = 2;  // Base header (FIN+opcode, MASK+len)
@@ -217,22 +217,30 @@ int16_t ws_client_send_binary(uint8_t* buffer, uint16_t payload_len) {
 /**
  * @brief Process WebSocket connection and receive data
  */
-int8_t ws_client_process(uint8_t* buffer, uint16_t* len, ws_opcode_t* opcode) {
+int8_t ws_client_process(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode) {
     if (!g_ws_initialized) {
         return WS_ERR_NOT_INITIALIZED;
+    }
+
+    // Check socket status
+    socket_status_t status = getSocketStatus(g_ws_config.socket_num);
+    if (status != SOCKET_ESTABLISHED) {
+        g_ws_state = WS_STATE_DISCONNECTED;
+        return WS_ERR_DISCONNECTED;
     }
     
     // Process event flags from callbacks
     if (g_timeout_flag) {
         g_timeout_flag = false;
-        g_ws_state = WS_STATE_ERROR;
+        g_ws_state = WS_STATE_DISCONNECTED;
         return WS_ERR_TIMEOUT;
     }
     
     if (g_disconnect_req_flag) {
         g_disconnect_req_flag = false;
-        // Send close frame acknowledgment
+        // Disconnect requested at TCP level - close socket
         disconnect(g_ws_config.socket_num);
+        close(g_ws_config.socket_num);
         g_ws_state = WS_STATE_DISCONNECTED;
         return WS_ERR_DISCONNECTED;
     }
@@ -245,13 +253,22 @@ int8_t ws_client_process(uint8_t* buffer, uint16_t* len, ws_opcode_t* opcode) {
     }
     
     // Check current state
-    if (g_ws_state != WS_STATE_CONNECTED) {
-        return WS_ERR_WRONG_STATE;
+    if (g_ws_state == WS_STATE_CLOSING) {
+        // Check timeout waiting for close frame acknowledgment
+        if (osKernelGetTickCount() - g_close_time > 5000) {
+            // Timeout waiting for close acknowledgment - force close
+            disconnect(g_ws_config.socket_num);
+            close(g_ws_config.socket_num);
+            g_ws_state = WS_STATE_DISCONNECTED;
+            return WS_ERR_DISCONNECTED;
+        }
+        // Still waiting for CLOSE frame response, just update state
+        return WS_OK;
     }
     
-    // If no buffer provided, just update state
-    if (buffer == NULL || len == NULL || opcode == NULL) {
-        return WS_OK;
+    // Check current state
+    if (g_ws_state != WS_STATE_CONNECTED) {
+        return WS_ERR_WRONG_STATE;
     }
     
     // Process incoming data
@@ -261,11 +278,11 @@ int8_t ws_client_process(uint8_t* buffer, uint16_t* len, ws_opcode_t* opcode) {
 /**
  * @brief Internal function to process received frames
  */
-static int8_t ws_process_internal(uint8_t* buffer, uint16_t* len, ws_opcode_t* opcode) {
+static int8_t ws_process_internal(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode) {
     // Try to receive data
     uint32_t received = recv(g_ws_config.socket_num, ws_rx_temp, sizeof(ws_rx_temp));
     if (received == 0) {
-        return 0;  // No data available
+        return WS_OK;  // No data available
     }
     
     // Parse frame header
@@ -276,7 +293,7 @@ static int8_t ws_process_internal(uint8_t* buffer, uint16_t* len, ws_opcode_t* o
     uint16_t pos = 0;
     
     // First byte: FIN + opcode
-    bool fin = (ws_rx_temp[pos] & 0x80) != 0;
+    //bool fin = (ws_rx_temp[pos] & 0x80) != 0;
     *opcode = (ws_opcode_t)(ws_rx_temp[pos] & 0x0F);
     pos++;
     
@@ -311,24 +328,23 @@ static int8_t ws_process_internal(uint8_t* buffer, uint16_t* len, ws_opcode_t* o
     switch (*opcode) {
         case WS_OPCODE_TEXT:
         case WS_OPCODE_BINARY:
-            if (payload_len > *len) {
-                *len = 0;
+            // If buffer is NULL, don't bother copying the payload
+            if (buffer == NULL) return WS_OK;
+
+            if (payload_len > len) {
                 return WS_ERR_BUFFER_TOO_SMALL;
             }
             memcpy(buffer, &ws_rx_temp[pos], payload_len);
             if (mask) {
                 ws_mask_payload(buffer, payload_len, masking_key);
             }
-            *len = payload_len;
-            break;
+            return payload_len;
             
         case WS_OPCODE_PING:
             // Respond with pong
             {
                 uint8_t pong_masking_key[4];
-                for (int i = 0; i < 4; i++) {
-                    pong_masking_key[i] = (uint8_t)(ws_rand() & 0xFF);
-                }
+                ws_generate_masking_key(pong_masking_key);
                 uint16_t pong_header_len = ws_create_frame_header(ws_tx_temp, WS_OPCODE_PONG, 
                                                                    payload_len, true, pong_masking_key);
                 // Copy and mask payload
@@ -338,34 +354,40 @@ static int8_t ws_process_internal(uint8_t* buffer, uint16_t* len, ws_opcode_t* o
                 }
                 send(g_ws_config.socket_num, ws_tx_temp, pong_header_len + payload_len);
             }
-            *len = 0;
-            return 0;
+            break;
             
         case WS_OPCODE_PONG:
-            *len = 0;
-            return 0;
+            break;
             
         case WS_OPCODE_CLOSE:
-            g_ws_state = WS_STATE_CLOSING;
-            // Send close frame acknowledgment
-            {
+            // Server sent close frame
+            if (g_ws_state == WS_STATE_CONNECTED) {
+                // Server initiated close, send acknowledgment
                 uint8_t close_masking_key[4];
-                for (int i = 0; i < 4; i++) {
-                    close_masking_key[i] = (uint8_t)(ws_rand() & 0xFF);
-                }
+                ws_generate_masking_key(close_masking_key);
                 uint16_t close_header_len = ws_create_frame_header(ws_tx_temp, WS_OPCODE_CLOSE, 
                                                                     0, true, close_masking_key);
                 send(g_ws_config.socket_num, ws_tx_temp, close_header_len);
+                
+                osDelay(2000); // Wait for 2 second to ensure (mostly) the close frame is sent
+                // Close the underlying TCP connection
+                disconnect(g_ws_config.socket_num);
+                close(g_ws_config.socket_num);
+                g_ws_state = WS_STATE_DISCONNECTED;
             }
-            *len = 0;
-            return WS_ERR_DISCONNECTED;
+            else if (g_ws_state == WS_STATE_CLOSING) {
+                // We initiated close, server responded - close TCP connection
+                disconnect(g_ws_config.socket_num);
+                close(g_ws_config.socket_num);
+                g_ws_state = WS_STATE_DISCONNECTED;
+            }
+            break;
             
         default:
-            *len = 0;
-            return 0;
+            break;
     }
     
-    return 1;
+    return WS_OK;
 }
 
 /**
@@ -381,9 +403,7 @@ int8_t ws_client_ping(void) {
     }
     
     uint8_t masking_key[4];
-    for (int i = 0; i < 4; i++) {
-        masking_key[i] = (uint8_t)(ws_rand() & 0xFF);
-    }
+    ws_generate_masking_key(masking_key);
     
     uint16_t header_len = ws_create_frame_header(ws_tx_temp, WS_OPCODE_PING, 0, true, masking_key);
     int32_t sent = send(g_ws_config.socket_num, ws_tx_temp, header_len);
@@ -402,19 +422,13 @@ int8_t ws_client_close(void) {
     if (g_ws_state == WS_STATE_CONNECTED) {
         // Send close frame
         uint8_t masking_key[4];
-        for (int i = 0; i < 4; i++) {
-            masking_key[i] = (uint8_t)(ws_rand() & 0xFF);
-        }
+        ws_generate_masking_key(masking_key);
         
         uint16_t header_len = ws_create_frame_header(ws_tx_temp, WS_OPCODE_CLOSE, 0, true, masking_key);
         send(g_ws_config.socket_num, ws_tx_temp, header_len);
-        
         g_ws_state = WS_STATE_CLOSING;
+        g_close_time = osKernelGetTickCount();
     }
-    
-    // Close socket
-    close(g_ws_config.socket_num);
-    g_ws_state = WS_STATE_DISCONNECTED;
     
     return WS_OK;
 }

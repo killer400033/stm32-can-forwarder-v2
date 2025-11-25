@@ -20,7 +20,11 @@ extern osMessageQueueId_t storageCanQueueHandle;
 extern osMessageQueueId_t storageLogQueueHandle;
 extern SD_HandleTypeDef hsd1;
 
-CanFrameList_t canFrameList = {0};
+// Maximum number of CAN frames to write to file at once
+#define MAX_CAN_FRAME_CNT 5
+CanFrame canFrames[MAX_CAN_FRAME_CNT];
+uint8_t canFrameCount = 0;
+
 static char can_filename[64];
 static char log_filename[64];
 
@@ -92,12 +96,12 @@ void storageThread(void *argument) {
 				UINT bytes_written = 0;
 				
 				// === Process CAN data ===
-				while (osMessageQueueGetCount(storageCanQueueHandle) > 0 && canFrameList.count < MAX_CAN_FRAME_CNT) {
-					osMessageQueueGet(storageCanQueueHandle, &(canFrameList.canFrames[canFrameList.count++]), 0, 0);
+				while (osMessageQueueGetCount(storageCanQueueHandle) > 0 && canFrameCount < MAX_CAN_FRAME_CNT) {
+					osMessageQueueGet(storageCanQueueHandle, &(canFrames[canFrameCount++]), 0, 0);
 				}
 				
-				if (canFrameList.count > 0) {
-					can_res = f_write(&canFile, canFrameList.canFrames, sizeof(CanFrame) * canFrameList.count, &bytes_written);
+				if (canFrameCount > 0) {
+					can_res = f_write(&canFile, canFrames, sizeof(CanFrame) * canFrameCount, &bytes_written);
 					
 					if (can_res != FR_OK) {
 						log_msg(LL_ERR, "CAN file write error: %d", can_res);
@@ -105,7 +109,7 @@ void storageThread(void *argument) {
 						can_bytes_written += bytes_written;
 					}
 					
-					canFrameList.count = 0;
+					canFrameCount = 0;
 				}
 				
 				// === Process log data ===

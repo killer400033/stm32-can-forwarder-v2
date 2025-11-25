@@ -39,11 +39,8 @@ typedef enum {
 // WebSocket client state
 typedef enum {
     WS_STATE_DISCONNECTED,
-    WS_STATE_CONNECTING,
-    WS_STATE_HANDSHAKE,
     WS_STATE_CONNECTED,
     WS_STATE_CLOSING,
-    WS_STATE_ERROR
 } ws_state_t;
 
 // WebSocket client configuration
@@ -84,13 +81,13 @@ int16_t ws_client_send_binary(uint8_t* buffer, uint16_t payload_len);
 /**
  * @brief Process WebSocket connection and receive data
  * @param buffer Buffer to store received payload (or NULL to just process state)
- * @param len Pointer to buffer size (input) and received length (output)
+ * @param len Buffer size
  * @param opcode Pointer to store received opcode (or NULL if buffer is NULL)
- * @return 1 if data received, 0 if no data, negative error code on failure
+ * @return Length of received data on success, 0 if no data, negative error code on failure
  * @note Call this regularly to process connection state changes and receive frames
  * @note Can be called with buffer=NULL to just update state without receiving data
  */
-int8_t ws_client_process(uint8_t* buffer, uint16_t* len, ws_opcode_t* opcode);
+int8_t ws_client_process(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode);
 
 /**
  * @brief Send ping frame
