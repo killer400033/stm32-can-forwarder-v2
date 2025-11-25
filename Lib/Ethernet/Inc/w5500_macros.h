@@ -43,7 +43,6 @@
 #define  _W5500_H_
 
 #include <stdint.h>
-#include "wizchip_conf.h"
 
 #define _W5500_IO_BASE_              0x00000000
 

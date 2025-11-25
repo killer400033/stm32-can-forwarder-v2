@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "wizchip_conf.h"
 #include "main.h"
+#include "w5500_macros.h"
 
 #ifdef __cplusplus
 extern "C" {

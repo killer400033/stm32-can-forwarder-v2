@@ -258,12 +258,12 @@ int8_t _ntp_receive_response(ntp_response_t* response)
         int32_t recv_len = recvfrom(g_ntp_config.socket_num, ntp_response_buffer, 
                                    NTP_PACKET_SIZE, peer_ip, &peer_port);
         
-        if (recv_len == SOCK_OK) {
+        if (recv_len > 0 && peer_port == NTP_PORT && memcmp(peer_ip, g_ntp_config.ntp_server, 4) == 0) {
             // Check if response came from the expected server and port
-            if (peer_port == NTP_PORT && 
-                memcmp(peer_ip, g_ntp_config.ntp_server, 4) == 0) {
-                return _ntp_parse_response(ntp_response_buffer, NTP_PACKET_SIZE, response);
-            }
+        		int8_t result = _ntp_parse_response(ntp_response_buffer, NTP_PACKET_SIZE, response);
+        		if (result == NTP_OK) {
+        				return NTP_OK;
+        		}
         }
         
         osDelay(100); // Small delay to prevent busy waiting

@@ -447,7 +447,7 @@ int8_t dns_query(const char* hostname, uint16_t qtype, dns_response_t* response)
             uint32_t recv_len = recvfrom(g_dns_config.socket_num, response_buffer, 
                                         sizeof(response_buffer), peer_ip, &peer_port);
             
-            if (recv_len > 0 && peer_port == DNS_PORT) {
+            if (recv_len > 0 && peer_port == DNS_PORT && memcmp(peer_ip, g_dns_config.dns_server, 4) == 0) {
                 // Parse response
                 result = _dns_parse_response(response_buffer, recv_len, response);
                 if (result == DNS_OK) {
