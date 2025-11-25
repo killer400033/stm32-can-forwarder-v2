@@ -4,6 +4,7 @@
 #include "main.h"
 #include "w5500_macros.h"
 #include "w5500.hpp"
+#include "w5500_driver.h"
 
 // Forward declarations
 static void kickStartCommands(void);
@@ -434,6 +435,8 @@ static void dmaTXCompleteCallback(void) {
         case READ_SIR:
             HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
             break;
+        case READ_SOC:
+        		HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.ptr, running_cmd.ptr, running_cmd.len);
         case CHECK_RCV:
             HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
             break;
@@ -525,6 +528,8 @@ static void dmaRXCompleteCallback(void) {
             }
 
             if (socket->registers.IR & Sn_IR_TIMEOUT) {
+                // Clear sending state
+                socket->is_sending = false;
                 // Timeout occurred, socket is closed
                 if (socket->callback != NULL) {
                     socket->callback(SOCKET_TIMEOUT_CALLBACK, NULL);
@@ -581,6 +586,7 @@ void sendPendingData(uint8_t sn) {
 
         command_t cmd;
 
+        // If UDP, set destination address and port
         if (sockets[sn].registers.MR & Sn_MR_UDP) {
             generateSetRegCmd(&cmd, sn, Sn_DIPR(sn), segment.addr, 4);
             if (!queuePushBack(&command_queue, cmd)) {

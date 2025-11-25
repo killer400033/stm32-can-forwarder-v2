@@ -34,6 +34,7 @@
 #include "w5500_setup.h"
 #include "adc_scanner.h"
 #include "log_handler.h"
+#include "w5500_driver.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/

@@ -4,14 +4,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "queue.hpp"
-#include "socket.h"
 
 #define COMMAND_QUEUE_SIZE 100
 #define SOCKET_QUEUE_SIZE 15
 #define COMMAND_BUFFER_SIZE 10
 #define MAX_SOCK_NUM _WIZCHIP_SOCK_NUM_  // Maximum number of sockets
 
-#define MAC_ADDRESS { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED }
+#define MAC_ADDRESS { 0x00, 0x08, 0xDC, 0xAB, 0xCD, 0xEF }
 #define INT_LEVEL 0x0000
 #define RETRY_TIME 1000 // Retry time in milliseconds
 #define RETRY_COUNT 5 // Retry count
@@ -131,29 +130,6 @@ typedef struct socket_t {
 
 extern socket_t sockets[_WIZCHIP_SOCK_NUM_];
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/**
- * @brief WIZNET W5500 interrupt callback
- * @note Call this function from your GPIO EXTI interrupt handler when W5500 INT pin triggers
- * @warning This is an ISR ONLY function. It queues a command to read the interrupt status.
- */
-void wiznetInterruptCallback(void);
-/**
- * @brief WIZNET W5500 SPI TX/RX complete callback
- * @note Call this function from your SPI interrupt handler when TX/RX is complete
- * @warning This is an ISR ONLY function. It processes the received data and manages the TX queue.
- */
-void wiznetSPITxRxCompleteCallback(void);
-/**
- * @brief WIZNET W5500 SPI TX complete callback
- * @note Call this function from your SPI interrupt handler when TX is complete
- * @warning This is an ISR ONLY function. It processes the received data and manages the TX queue.
- */
-void wiznetSPITxCompleteCallback(void);
-
 // W5500 low-level functions
 bool enqueueSetReg(uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len);
 bool enqueueGetReg(uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
@@ -179,9 +155,5 @@ void receivePendingData(uint8_t sn);
 // External declarations
 extern command_t running_cmd;
 extern common_regs_t common_regs;
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // W5500_HPP

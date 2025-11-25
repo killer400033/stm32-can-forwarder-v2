@@ -32,6 +32,10 @@ int socket(uint8_t sn, uint8_t protocol, uint16_t port, uint8_t* tx_buf, uint16_
     queueClear(&sockets[sn].tx_buf_queue);
     queueClear(&sockets[sn].rx_buf_queue);
 
+    // Reset states
+    sockets[sn].is_sending = false;
+    sockets[sn].is_receiving = false;
+
     // Store callback
     sockets[sn].callback = callback;
     
