@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "socket.h"
 
 // External HAL functions (assuming STM32 HAL)
 extern uint32_t HAL_GetTick(void);
@@ -69,7 +70,7 @@ int8_t ntp_init(ntp_config_t* config)
     }
     
     // Generate random source port (1024-50000)
-    uint16_t source_port = 1024 + (HAL_GetTick() % (50000 - 1024));
+    uint16_t source_port = 40000 + (HAL_GetTick() % 10000); // Random port between 40000-49999
     
     // Initialize socket for UDP with provided buffers
     int8_t result = socket(g_ntp_config.socket_num, SOCKET_PROTOCOL_UDP, source_port,

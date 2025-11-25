@@ -22,8 +22,25 @@ const osThreadAttr_t appLayerTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
-pb_byte_t buffer[512];
+// WebSocket tx buffer union
+typedef union {
+    uint8_t full[WS_MAX_HEADER_LEN + 512];  // Full buffer
+    struct {
+        uint8_t header_space[WS_MAX_HEADER_LEN];  // Reserved for WebSocket header
+        uint8_t data[512];                          // Payload data
+    };
+} ws_send_buffer_t;
+
+static ws_send_buffer_t ws_send_buf;
 static CanFrameList_t canFrameList = {0};
+
+// WebSocket TX/RX buffers for socket API
+static uint8_t ws_tx_buf[4096+3];
+static uint8_t ws_rx_buf[1024+3];
+
+// WebSocket RX buffer from WebSocket client
+uint8_t recv_buf[256];
+uint16_t recv_len = sizeof(recv_buf);
 
 void appLayerThread(void *argument);
 static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *canFrames);
@@ -39,8 +56,11 @@ static uint32_t dns_ttl_expiry = 0;  // Timestamp when TTL expires
 static bool dns_request_pending = false;
 static bool has_valid_ip = false;
 
-void initAppLayer() {
+RNG_HandleTypeDef *app_rng = NULL;
+
+void initAppLayer(RNG_HandleTypeDef *hrng) {
 	appLayerTaskHandle = osThreadNew(appLayerThread, NULL, &appLayerTask_attributes);
+	app_rng = hrng;
 }
 
 // DNS resolution callback
@@ -59,25 +79,23 @@ void appLayerThread(void *argument) {
 	uint32_t prev_time = osKernelGetTickCount();
 	uint32_t prev_cnt = 0;
 	uint32_t cnt = 0;
+	bool connected = false;
 
-	static websocket_client_t ws_client;
-	static bool connected = false;
-
-	ws_client_init(&ws_client, WS_SOCKET);
+	// Initialize WebSocket client with new API
+	ws_config_t ws_config = {
+		.socket_num = WS_SOCKET,
+		.host = {0, 0, 0, 0},  // Will be set after DNS resolution
+		.port = 80,
+		.path = WS_DOMAIN_PATH,
+		.tx_buf = ws_tx_buf,
+		.tx_buf_len = sizeof(ws_tx_buf),
+		.rx_buf = ws_rx_buf,
+		.rx_buf_len = sizeof(ws_rx_buf)
+	};
 
 	for (;;) {
-		if (ws_client.state == WS_STATE_CONNECTED && !connected) {
-			log_msg(LL_DBG, "WebSocket connected!");
-			connected = true;
-	  }
-		if (ws_client.state == WS_STATE_DISCONNECTED && connected) {
-			log_msg(LL_WRN, "WebSocket disconnected...");
-			connected = false;
-		}
-		ws_client_process(&ws_client);
-
 		// Check if DNS TTL has expired and no request is pending
-		if ((!has_valid_ip) && !dns_request_pending) {
+		if (!has_valid_ip && !dns_request_pending) {
 			// Check if queue has space
 			if (osMessageQueueGetSpace(dnsReqQueueHandle) > 0) {
 				dns_request_t dns_req = {
@@ -87,43 +105,82 @@ void appLayerThread(void *argument) {
 				
 				if (osMessageQueuePut(dnsReqQueueHandle, &dns_req, 0, 0) == osOK) {
 					dns_request_pending = true;
-				} else {
-					log_msg(LL_ERR, "DNS Request: Failed to queue request");
-					osDelay(1000);
 				}
-			} else {
-				log_msg(LL_ERR, "DNS Request: Queue full, cannot queue request");
-				osDelay(1000);
 			}
 		}
 
 		// Wait for valid IP before attempting connection
-		if (!has_valid_ip || !ntp_sync_successful) {
+		if (!has_valid_ip) {
 			osDelay(1000);
 			continue;
 		}
 
-		// TODO: Remove FAT delay when networking fixed
-		if (ws_client.state == WS_STATE_DISCONNECTED) {
-			osDelay(20000);
-			if (ws_client_connect(&ws_client, ws_server_ip, 80, WS_DOMAIN_PATH) != 0) {
-				log_msg(LL_WRN, "WebSocket client connection failed...");
+		// Update WebSocket config with resolved IP (only needs to be done once)
+		if (has_valid_ip && ws_config.host[0] == 0) {
+			memcpy(ws_config.host, ws_server_ip, 4);
+			ws_client_init(&ws_config);
+		}
+
+		ws_state_t ws_state = ws_client_get_state();
+
+		// Attempt to connect if disconnected
+		if (ws_state == WS_STATE_DISCONNECTED || ws_state == WS_STATE_ERROR) {
+			int result = ws_client_connect();
+			if (result != WS_OK) {
+				log_msg(LL_WRN, "WebSocket connection failed: %d", result);
+				osDelay(5000);
 			}
 		}
 
-		if (ws_client.state == WS_STATE_CONNECTED) {
+		// Handle state transitions
+		if (ws_state == WS_STATE_CONNECTED && !connected) {
+			log_msg(LL_DBG, "WebSocket connected!");
+			connected = true;
+		}
+		if ((ws_state == WS_STATE_DISCONNECTED || ws_state == WS_STATE_ERROR) && connected) {
+			log_msg(LL_WRN, "WebSocket disconnected...");
+			connected = false;
+		}
+
+		// Process WebSocket (handles callbacks, state updates, receives data)
+		ws_opcode_t opcode;
+		int8_t proc_result = ws_client_process(recv_buf, &recv_len, &opcode);
+		
+		if (proc_result < 0) {
+			// Error occurred
+			if (proc_result == WS_ERR_TIMEOUT) {
+				log_msg(LL_WRN, "WebSocket timeout");
+			} else if (proc_result == WS_ERR_DISCONNECTED) {
+				log_msg(LL_DBG, "WebSocket disconnected gracefully");
+			}
+		} else if (proc_result > 0) {
+			// Data received (not currently used, but available)
+			log_msg(LL_DBG, "WS RX: %d bytes, opcode: %d", recv_len, opcode);
+		}
+
+		// Send data if connected
+		if (ws_state == WS_STATE_CONNECTED) {
+			// Collect CAN frames from queue
 			while (osMessageQueueGetCount(wsCanQueueHandle) > 0 && canFrameList.count < MAX_CAN_FRAME_CNT) {
 				osMessageQueueGet(wsCanQueueHandle, &(canFrameList.canFrames[canFrameList.count++]), 0, 0);
 			}
 
-			size_t msg_length = packetEncode(buffer, sizeof(buffer), &canFrameList);
+			if (canFrameList.count > 0) {
+				// Encode packet into the data section of the buffer
+				size_t msg_length = packetEncode(ws_send_buf.data, sizeof(ws_send_buf.data), &canFrameList);
 
-			// Send data over WebSocket
-			if (ws_client.state == WS_STATE_CONNECTED && msg_length > 0) {
-				(void)ws_client_send_binary(&ws_client, buffer, (uint16_t)msg_length);
+				// Send data over WebSocket (function will write header in header_space)
+				if (msg_length > 0) {
+					int16_t sent = ws_client_send_binary(ws_send_buf.data, (uint16_t)msg_length);
+					if (sent < 0) {
+						log_msg(LL_ERR, "WebSocket send failed: %d", sent);
+					} else {
+						cnt += canFrameList.count;
+					}
+				}
+				
+				canFrameList.count = 0;
 			}
-			cnt += canFrameList.count;
-			canFrameList.count = 0;
 		}
 
 		// Throughput measuring
@@ -132,8 +189,6 @@ void appLayerThread(void *argument) {
 			prev_time = osKernelGetTickCount();
 			prev_cnt = cnt;
 			log_msg(LL_DBG, "Websocket: %ld B/s", speed);
-			log_msg(LL_DBG, "Connect Stat: %d", ws_client.state);
-			log_msg(LL_DBG, "Dropped Packets: %ld", dropped_packets);
 		}
 
 		osThreadYield();
@@ -175,4 +230,10 @@ static bool canFramesEncode(pb_ostream_t *stream, const pb_field_iter_t *field, 
 		}
 	}
 	return true;
+}
+
+uint32_t ws_rand(void) {
+	uint32_t random_value;
+	HAL_RNG_GenerateRandomNumber(app_rng, &random_value);
+	return random_value;
 }

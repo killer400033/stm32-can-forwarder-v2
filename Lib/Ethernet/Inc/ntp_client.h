@@ -18,7 +18,6 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "socket.h"
 
 // NTP Constants
 #define NTP_PORT                    123         ///< Standard NTP port

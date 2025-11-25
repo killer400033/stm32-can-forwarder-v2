@@ -8,15 +8,23 @@
 extern "C" {
 #endif
 
-// Include socket for definitions - websocket needs full porting to new driver
-#include "socket.h"
-
 // WebSocket constants
-#define WS_MAGIC_STRING "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #define WS_KEY_LEN 16
 #define WS_ACCEPT_LEN 28
 #define WS_MAX_HEADER_LEN 14
-#define WS_MAX_PAYLOAD_LEN 1024
+
+// WebSocket error codes
+#define WS_OK                    0   // Success
+#define WS_ERR_INVALID_PARAM    -1   // Invalid parameter
+#define WS_ERR_NOT_INITIALIZED  -2   // Client not initialized
+#define WS_ERR_WRONG_STATE      -3   // Wrong state for operation
+#define WS_ERR_SOCKET_FAIL      -4   // Socket operation failed
+#define WS_ERR_CONNECT_FAIL     -5   // Connection failed
+#define WS_ERR_HANDSHAKE_FAIL   -6   // WebSocket handshake failed
+#define WS_ERR_TIMEOUT          -7   // Operation timed out
+#define WS_ERR_BUFFER_TOO_SMALL -8   // Buffer too small
+#define WS_ERR_DISCONNECTED     -9   // Connection closed
+#define WS_ERR_INVALID_FRAME    -10  // Invalid WebSocket frame
 
 // WebSocket opcodes
 typedef enum {
@@ -28,16 +36,6 @@ typedef enum {
     WS_OPCODE_PONG = 0xA
 } ws_opcode_t;
 
-// WebSocket frame structure
-typedef struct {
-    bool fin;
-    bool mask;
-    ws_opcode_t opcode;
-    uint16_t payload_len;
-    uint8_t masking_key[4];
-    uint8_t *payload;
-} ws_frame_t;
-
 // WebSocket client state
 typedef enum {
     WS_STATE_DISCONNECTED,
@@ -48,35 +46,77 @@ typedef enum {
     WS_STATE_ERROR
 } ws_state_t;
 
-// WebSocket client structure
+// WebSocket client configuration
 typedef struct {
-    uint8_t socket_num;
-    ws_state_t state;
-    uint8_t host[4];
-    uint16_t port;
-    char path[128];
-    char sec_websocket_key[25];
-    uint8_t rx_buffer[WS_MAX_PAYLOAD_LEN + WS_MAX_HEADER_LEN];
-    uint8_t tx_buffer[WS_MAX_PAYLOAD_LEN + WS_MAX_HEADER_LEN];
-} websocket_client_t;
+    uint8_t socket_num;      // Socket number to use
+    uint8_t host[4];         // Server IP address
+    uint16_t port;           // Server port
+    char path[128];          // WebSocket path
+    uint8_t* tx_buf;         // TX buffer for socket
+    uint16_t tx_buf_len;     // TX buffer length
+    uint8_t* rx_buf;         // RX buffer for socket
+    uint16_t rx_buf_len;     // RX buffer length
+} ws_config_t;
 
-// Function prototypes
-int8_t ws_client_init(websocket_client_t *client, uint8_t socket_num);
-int8_t ws_client_connect(websocket_client_t *client, uint8_t *host, uint16_t port, const char *path);
-int8_t ws_client_send_text(websocket_client_t *client, const char *text);
-int8_t ws_client_send_binary(websocket_client_t *client, const uint8_t *data, uint16_t len);
-int8_t ws_client_receive(websocket_client_t *client, uint8_t *buffer, uint16_t *len, ws_opcode_t *opcode);
-int8_t ws_client_ping(websocket_client_t *client);
-int8_t ws_client_close(websocket_client_t *client);
-void ws_client_process(websocket_client_t *client);
+/**
+ * @brief Initialize WebSocket client
+ * @param config Configuration structure with connection parameters and buffers
+ * @return WS_OK on success, negative error code on failure
+ */
+int8_t ws_client_init(ws_config_t* config);
 
-// Helper functions
-static void ws_generate_key(char *key);
-static void ws_base64_encode(const uint8_t *input, uint16_t input_len, char *output);
-static int8_t ws_parse_handshake_response(websocket_client_t *client, const char *response);
-static uint16_t ws_create_frame(uint8_t *buffer, ws_opcode_t opcode, const uint8_t *payload, uint16_t payload_len, bool mask);
-static int8_t ws_parse_frame(const uint8_t *buffer, uint16_t buffer_len, ws_frame_t *frame);
-static void ws_mask_payload(uint8_t *payload, uint16_t len, const uint8_t *mask);
+/**
+ * @brief Connect to WebSocket server
+ * @return WS_OK on success, negative error code on failure
+ */
+int8_t ws_client_connect(void);
+
+/**
+ * @brief Send binary frame
+ * @param buffer Buffer containing payload data with WS_MAX_HEADER_LEN bytes reserved at the front
+ * @param payload_len Length of payload data (NOT including header space)
+ * @return Total frame length (header + payload) on success, negative error code on failure
+ * @note Buffer must have WS_MAX_HEADER_LEN bytes of free space before the payload data
+ * @note The function will write the WebSocket frame header and mask the payload in-place
+ */
+int16_t ws_client_send_binary(uint8_t* buffer, uint16_t payload_len);
+
+/**
+ * @brief Process WebSocket connection and receive data
+ * @param buffer Buffer to store received payload (or NULL to just process state)
+ * @param len Pointer to buffer size (input) and received length (output)
+ * @param opcode Pointer to store received opcode (or NULL if buffer is NULL)
+ * @return 1 if data received, 0 if no data, negative error code on failure
+ * @note Call this regularly to process connection state changes and receive frames
+ * @note Can be called with buffer=NULL to just update state without receiving data
+ */
+int8_t ws_client_process(uint8_t* buffer, uint16_t* len, ws_opcode_t* opcode);
+
+/**
+ * @brief Send ping frame
+ * @return WS_OK on success, negative error code on failure
+ */
+int8_t ws_client_ping(void);
+
+/**
+ * @brief Close WebSocket connection
+ * @return WS_OK on success, negative error code on failure
+ */
+int8_t ws_client_close(void);
+
+/**
+ * @brief Get current WebSocket state
+ * @return Current state
+ */
+ws_state_t ws_client_get_state(void);
+
+/**
+ * @brief External random number generator (must be implemented by user)
+ * @return Random 32-bit unsigned integer
+ * @note This function must be provided by the application
+ * @note Should return a different value each time for proper masking
+ */
+extern uint32_t ws_rand(void);
 
 #ifdef __cplusplus
 }

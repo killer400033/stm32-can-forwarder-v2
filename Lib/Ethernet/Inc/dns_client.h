@@ -18,7 +18,6 @@ extern "C" {
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "socket.h"
 
 // DNS Constants
 #define DNS_PORT                    53          ///< Standard DNS port

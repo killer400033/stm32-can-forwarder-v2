@@ -15,6 +15,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include "cmsis_os.h"
+#include "socket.h"
 
 // External HAL functions (assuming STM32 HAL)
 extern uint32_t HAL_GetTick(void);
