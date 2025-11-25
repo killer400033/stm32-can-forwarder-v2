@@ -33,9 +33,9 @@ typedef void (*socket_callback_t)(socket_callback_type_t type, void* data);
 #define SOCKERR_QUEUE_FULL      -3   // Command Queue is full
 #define SOCKERR_INVALID_STATE   -4   // Socket in invalid state
 #define SOCKERR_TCP_TIMEOUT     -5   // TCP timeout
-#define SOCKERR_TXBUF_FULL     -6   // Buffer is full
-#define SOCKERR_TXBUF_TOO_SMALL -7  // Buffer is too small
-#define SOCKERR_BUFFERS_TOO_SMALL -8  // Buffer is too small
+#define SOCKERR_TXBUF_FULL     -6   // TX Buffer is full
+#define SOCKERR_PACK_TOO_LRG -7     // Packet is too large for wiznet
+#define SOCKERR_RXBUF_TOO_SMALL -8  // RX Buffer is too small
 
 /**
  * @brief Configure W5500 hardware (SPI and CS pin)

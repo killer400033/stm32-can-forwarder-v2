@@ -6,6 +6,7 @@
 #include "w5500.hpp"
 
 // Forward declarations
+static void kickStartCommands(void);
 static void dmaTXCompleteCallback(void);
 static void dmaRXCompleteCallback(void);
 static inline void generateSetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len);
@@ -18,7 +19,7 @@ uint32_t enqueueFailsInISR = 0;
 uint32_t commandRetries = 0;
 
 static Queue<command_t, COMMAND_QUEUE_SIZE> command_queue;
-command_t running_cmd = {WRITE_REG, 0, {0}, nullptr, 0}; // Just to make sure no RX commands are run
+command_t running_cmd = IDLE_COMMAND; // Starts off IDLE
 common_regs_t common_regs = {0};
 
 socket_t sockets[_WIZCHIP_SOCK_NUM_] = {0};
@@ -74,6 +75,9 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
     const uint8_t rcr = RETRY_COUNT;
 
     queueInit(&command_queue);
+    
+    // Set callback to kick-start queue processing when pushing to empty queue
+    queueSetFirstPushCallback(&command_queue, kickStartCommands);
 
     // Write reset command
     common_regs.MR = MR_RST;
@@ -359,11 +363,20 @@ int16_t getRXBufferIndex(socket_t* socket, uint16_t len) {
     }
 }
 
+static void kickStartCommands(void) {
+    if (running_cmd.cmd_type != IDLE) return;
+    dmaTXCompleteCallback();
+}
+
 static void dmaTXCompleteCallback(void) {
     // Ensure only we access queue
     uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
 
     bool success = queuePopFront(&command_queue, &running_cmd);
+
+    if (!success) {
+        running_cmd = IDLE_COMMAND;
+    }
     
     taskEXIT_CRITICAL_FROM_ISR(isrm);
 

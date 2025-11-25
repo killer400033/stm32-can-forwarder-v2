@@ -22,6 +22,7 @@ struct Queue {
     uint16_t head;
     uint16_t tail;
     uint16_t count;
+    void (*on_first_push)(void); // Callback when pushing to empty queue
 };
 
 /**
@@ -30,6 +31,14 @@ struct Queue {
  */
 template<typename T, uint16_t SIZE>
 void queueInit(Queue<T, SIZE>* q);
+
+/**
+ * @brief Set callback to be called when pushing to an empty queue
+ * @param q Pointer to queue
+ * @param callback Function to call when queue transitions from empty to non-empty
+ */
+template<typename T, uint16_t SIZE>
+void queueSetFirstPushCallback(Queue<T, SIZE>* q, void (*callback)(void));
 
 /**
  * @brief Check if queue is empty
@@ -148,6 +157,12 @@ void queueInit(Queue<T, SIZE>* q) {
     q->head = 0;
     q->tail = 0;
     q->count = 0;
+    q->on_first_push = nullptr;
+}
+
+template<typename T, uint16_t SIZE>
+void queueSetFirstPushCallback(Queue<T, SIZE>* q, void (*callback)(void)) {
+    q->on_first_push = callback;
 }
 
 template<typename T, uint16_t SIZE>
@@ -175,9 +190,15 @@ bool queuePushBack(Queue<T, SIZE>* q, const T& item) {
     if (queueIsFull(q)) {
         return false;
     }
+    bool was_empty = queueIsEmpty(q);
     q->data[q->tail] = item;
     q->tail = (q->tail + 1) % SIZE;
     q->count++;
+    
+    // Call callback if queue was empty and callback is set
+    if (was_empty && q->on_first_push != nullptr) {
+        q->on_first_push();
+    }
     return true;
 }
 
@@ -186,9 +207,15 @@ bool queuePushFront(Queue<T, SIZE>* q, const T& item) {
     if (queueIsFull(q)) {
         return false;
     }
+    bool was_empty = queueIsEmpty(q);
     q->head = (q->head == 0) ? (SIZE - 1) : (q->head - 1);
     q->data[q->head] = item;
     q->count++;
+    
+    // Call callback if queue was empty and callback is set
+    if (was_empty && q->on_first_push != nullptr) {
+        q->on_first_push();
+    }
     return true;
 }
 

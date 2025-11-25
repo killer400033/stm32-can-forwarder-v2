@@ -28,7 +28,8 @@ void W5500Init(SPI_HandleTypeDef *hspi1) {
     // Step 1: Configure hardware (SPI and CS pin)
     int result = setWiznetHardware(wiznet_hspi1, SPI1_CS_GPIO_Port, SPI1_CS_Pin);
     if (result != SOCK_OK) {
-        log_msg(LL_ERR, "Failed to set W5500 hardware");
+        log_msg(LL_ERR, "Failed to set W5500 hardware: %d", result);
+        return;
     }
     
     // Step 2: Configure socket buffer sizes
@@ -52,7 +53,8 @@ void W5500Init(SPI_HandleTypeDef *hspi1) {
     result = initWizchip(net_info.ip, net_info.sn, net_info.gw, 
                         rx_buf_sizes, tx_buf_sizes);
     if (result != SOCK_OK) {
-        log_msg(LL_ERR, "Failed to initialize W5500 chip");
+        log_msg(LL_ERR, "Failed to initialize W5500 chip: %d", result);
+        return;
     }
     
     osDelay(500);

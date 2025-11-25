@@ -24,8 +24,8 @@ int socket(uint8_t sn, uint8_t protocol, uint16_t port, uint8_t* tx_buf, uint16_
         return SOCKERR_INVALID_PARAM;
     }
 
-    if (tx_buf_len < sockets[sn].registers.TXBUF_SIZE + 3 || rx_buf_len < sockets[sn].registers.RXBUF_SIZE + 3) {
-        return SOCKERR_BUFFERS_TOO_SMALL;
+    if (rx_buf_len < sockets[sn].registers.RXBUF_SIZE * 1024 + 3) {
+        return SOCKERR_RXBUF_TOO_SMALL;
     }
 
     // Clear socket send and receive queues
@@ -211,8 +211,8 @@ int send(uint8_t sn, uint8_t* buf, uint16_t len) {
         return SOCKERR_INVALID_STATE;
     }
 
-    if (sockets[sn].registers.TXBUF_SIZE < len) {
-        return SOCKERR_TXBUF_TOO_SMALL;
+    if (sockets[sn].registers.TXBUF_SIZE * 1024 < len || sockets[sn].tx_buf_len < len + 3) {
+        return SOCKERR_PACK_TOO_LRG;
     }
 
     // Critical section
@@ -266,8 +266,8 @@ int sendto(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t *addr, uint16_t port
         return SOCKERR_INVALID_STATE;
     }
 
-    if (sockets[sn].registers.TXBUF_SIZE < len) {
-        return SOCKERR_TXBUF_TOO_SMALL;
+    if (sockets[sn].registers.TXBUF_SIZE * 1024 < len || sockets[sn].tx_buf_len < len + 3) {
+        return SOCKERR_PACK_TOO_LRG;
     }
     
     // Critical section

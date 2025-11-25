@@ -21,8 +21,8 @@ const osThreadAttr_t dnsResolveTask_attributes = {
 extern osMessageQueueId_t dnsReqQueueHandle;
 
 // DNS socket buffers
-static uint8_t dns_tx_buffer[1024];
-static uint8_t dns_rx_buffer[1024];
+static uint8_t dns_tx_buffer[1024 + 3];
+static uint8_t dns_rx_buffer[1024 + 3];
 
 void initDNSResolve() {
     dns_config_t config = {
@@ -43,7 +43,7 @@ void initDNSResolve() {
     	dnsResolveTaskHandle = osThreadNew(dnsResolveThread, NULL, &dnsResolveTask_attributes);
     }
     else {
-    	log_msg(LL_ERR, "DNS Init Failed...");
+    	log_msg(LL_ERR, "DNS Init Failed: %d", result);
     }
 }
 
