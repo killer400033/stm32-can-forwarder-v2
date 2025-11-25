@@ -586,7 +586,9 @@ void sendPendingData(uint8_t sn) {
             if (!queuePushBack(&command_queue, cmd)) {
                 enqueueFailsInISR++;
             }
-            generateSetRegCmd(&cmd, sn, Sn_DPORT(sn), (uint8_t*)&segment.port, 2);
+            uint8_t port_bytes[2];
+            SET_U16(port_bytes, segment.port);
+            generateSetRegCmd(&cmd, sn, Sn_DPORT(sn), port_bytes, 2);
             if (!queuePushBack(&command_queue, cmd)) {
                 enqueueFailsInISR++;
             }
