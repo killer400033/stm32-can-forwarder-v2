@@ -12,7 +12,7 @@
 osThreadId_t storageTaskHandle;
 const osThreadAttr_t storageTask_attributes = {
   .name = "Storage",
-  .stack_size = 1024 * 4,
+  .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 
