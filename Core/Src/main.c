@@ -1350,11 +1350,11 @@ void StartDefaultTask(void *argument)
 
   for(;;) {
 		// Process messages from canRecQueue and distribute to other queues
-		//osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever);
-		while (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
+		osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever);
+		if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
 			osMessageQueuePut(wsCanQueueHandle, &canDataReceived, 0, 0);
 		}
-		/*else {
+		else {
 			if (osMessageQueueGetSpace(storageCanQueueHandle) > 0) {
 				osMessageQueuePut(storageCanQueueHandle, &canDataReceived, 0, 0);
 			}
@@ -1362,7 +1362,7 @@ void StartDefaultTask(void *argument)
 				dropped_packets++;
 			}
 
-		}*/
+		}
 		osThreadYield();
   }
   /* USER CODE END 5 */
