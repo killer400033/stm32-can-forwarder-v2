@@ -65,6 +65,8 @@ FDCAN_HandleTypeDef hfdcan1;
 FDCAN_HandleTypeDef hfdcan2;
 FDCAN_HandleTypeDef hfdcan3;
 
+IWDG_HandleTypeDef hiwdg1;
+
 RNG_HandleTypeDef hrng;
 
 RTC_HandleTypeDef hrtc;
@@ -88,6 +90,13 @@ const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for watchdogTask */
+osThreadId_t watchdogTaskHandle;
+const osThreadAttr_t watchdogTask_attributes = {
+  .name = "watchdogTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityHigh,
 };
 /* Definitions for wsCanQueue */
 osMessageQueueId_t wsCanQueueHandle;
@@ -143,7 +152,9 @@ static void MX_TIM2_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_RNG_Init(void);
 static void MX_TIM13_Init(void);
+static void MX_IWDG1_Init(void);
 void StartDefaultTask(void *argument);
+void watchdogHandler(void *argument);
 
 /* USER CODE BEGIN PFP */
 volatile uint32_t dropped_packets = 0;
@@ -207,6 +218,7 @@ int main(void)
   MX_TIM7_Init();
   MX_RNG_Init();
   MX_TIM13_Init();
+  MX_IWDG1_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -252,6 +264,9 @@ int main(void)
   /* Create the thread(s) */
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+  /* creation of watchdogTask */
+  watchdogTaskHandle = osThreadNew(watchdogHandler, NULL, &watchdogTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -801,6 +816,35 @@ static void MX_FDCAN3_Init(void)
 }
 
 /**
+  * @brief IWDG1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_IWDG1_Init(void)
+{
+
+  /* USER CODE BEGIN IWDG1_Init 0 */
+
+  /* USER CODE END IWDG1_Init 0 */
+
+  /* USER CODE BEGIN IWDG1_Init 1 */
+
+  /* USER CODE END IWDG1_Init 1 */
+  hiwdg1.Instance = IWDG1;
+  hiwdg1.Init.Prescaler = IWDG_PRESCALER_64;
+  hiwdg1.Init.Window = 4095;
+  hiwdg1.Init.Reload = 4095;
+  if (HAL_IWDG_Init(&hiwdg1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN IWDG1_Init 2 */
+
+  /* USER CODE END IWDG1_Init 2 */
+
+}
+
+/**
   * @brief RNG Initialization Function
   * @param None
   * @retval None
@@ -1322,6 +1366,25 @@ void StartDefaultTask(void *argument)
 		osThreadYield();
   }
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_watchdogHandler */
+/**
+* @brief Function implementing the watchdogTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_watchdogHandler */
+void watchdogHandler(void *argument)
+{
+  /* USER CODE BEGIN watchdogHandler */
+  /* Infinite loop */
+  for(;;)
+  {
+  	HAL_IWDG_Refresh(&hiwdg1);
+    osDelay(5000);
+  }
+  /* USER CODE END watchdogHandler */
 }
 
  /* MPU Configuration */

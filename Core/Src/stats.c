@@ -38,7 +38,6 @@ void statsThread(void *argument) {
         log_msg(LL_DBG, "Stats - Dropped packets: %lu, CAN send errors: %lu, CAN read errors: %lu", 
                 dropped_packets, can_send_errors, can_read_errors);
         
-        log_msg(LL_DBG, "Unix Time: %d", getUnixTimeSeconds());
         // Print enqueue fails only if greater than 0
         if (enqueueFailsInISR > 0) {
             log_msg(LL_ERR, "Stats - Enqueue fails in ISR: %lu", enqueueFailsInISR);
