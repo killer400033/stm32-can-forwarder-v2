@@ -226,6 +226,7 @@ int8_t ws_client_process(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode) {
     socket_status_t status = getSocketStatus(g_ws_config.socket_num);
     if (status != SOCKET_ESTABLISHED) {
         g_ws_state = WS_STATE_DISCONNECTED;
+        close(g_ws_config.socket_num);
         return WS_ERR_DISCONNECTED;
     }
     
@@ -233,6 +234,7 @@ int8_t ws_client_process(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode) {
     if (g_timeout_flag) {
         g_timeout_flag = false;
         g_ws_state = WS_STATE_DISCONNECTED;
+        close(g_ws_config.socket_num);
         return WS_ERR_TIMEOUT;
     }
     
@@ -240,7 +242,6 @@ int8_t ws_client_process(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode) {
         g_disconnect_req_flag = false;
         // Disconnect requested at TCP level - close socket
         disconnect(g_ws_config.socket_num);
-        close(g_ws_config.socket_num);
         g_ws_state = WS_STATE_DISCONNECTED;
         return WS_ERR_DISCONNECTED;
     }
@@ -248,6 +249,7 @@ int8_t ws_client_process(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode) {
     if (g_disconnect_suc_flag) {
         g_disconnect_suc_flag = false;
         // TCP disconnect completed successfully
+        close(g_ws_config.socket_num);
         g_ws_state = WS_STATE_DISCONNECTED;
         return WS_ERR_DISCONNECTED;
     }
@@ -257,7 +259,6 @@ int8_t ws_client_process(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode) {
         // Check timeout waiting for close frame acknowledgment
         if (osKernelGetTickCount() - g_close_time > 5000) {
             // Timeout waiting for close acknowledgment - force close
-            disconnect(g_ws_config.socket_num);
             close(g_ws_config.socket_num);
             g_ws_state = WS_STATE_DISCONNECTED;
             return WS_ERR_DISCONNECTED;
@@ -271,6 +272,8 @@ int8_t ws_client_process(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode) {
         return WS_ERR_WRONG_STATE;
     }
     
+    return WS_OK;
+
     // Process incoming data
     return ws_process_internal(buffer, len, opcode);
 }
@@ -368,17 +371,17 @@ static int8_t ws_process_internal(uint8_t* buffer, uint16_t len, ws_opcode_t* op
                 uint16_t close_header_len = ws_create_frame_header(ws_tx_temp, WS_OPCODE_CLOSE, 
                                                                     0, true, close_masking_key);
                 send(g_ws_config.socket_num, ws_tx_temp, close_header_len);
-                
-                osDelay(2000); // Wait for 2 second to ensure (mostly) the close frame is sent
+                // Send close frame might not work due to send failing or delay not being enough,
+                // but isn't too important as we will close the socket anyway.
+                osDelay(2000);
+
                 // Close the underlying TCP connection
                 disconnect(g_ws_config.socket_num);
-                close(g_ws_config.socket_num);
                 g_ws_state = WS_STATE_DISCONNECTED;
             }
             else if (g_ws_state == WS_STATE_CLOSING) {
                 // We initiated close, server responded - close TCP connection
                 disconnect(g_ws_config.socket_num);
-                close(g_ws_config.socket_num);
                 g_ws_state = WS_STATE_DISCONNECTED;
             }
             break;

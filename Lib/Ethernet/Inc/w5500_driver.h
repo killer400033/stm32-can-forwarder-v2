@@ -33,6 +33,7 @@ void wiznetSPITxCompleteCallback(void);
  * @param hspi SPI handle for W5500 communication
  * @param cs_port GPIO port for CS pin (e.g., GPIOA)
  * @param cs_pin GPIO pin for CS (e.g., GPIO_PIN_4)
+ * @param htim Timer handle for periodic socket polling
  * @return SOCK_OK (0) on success, SOCKERR_INVALID_PARAM if parameters are invalid
  */
 int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t cs_pin, TIM_HandleTypeDef* htim);

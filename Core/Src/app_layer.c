@@ -23,7 +23,7 @@ const osThreadAttr_t appLayerTask_attributes = {
 };
 
 // Maximum number of CAN frames to send in one websocket packet
-#define MAX_CAN_FRAME_CNT 5
+#define MAX_CAN_FRAME_CNT 9
 
 typedef struct CanFrameList {
     CanFrame canFrames[MAX_CAN_FRAME_CNT];
