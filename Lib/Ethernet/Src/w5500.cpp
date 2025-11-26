@@ -51,8 +51,8 @@ int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t c
     HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_SET);
     
     // Configure timer (550MHz)
-    #define WIZNET_TIM_CLK 550000000
-    #define WIZNET_POLL_RATE 100
+    #define WIZNET_TIM_CLK 275000000
+    #define WIZNET_POLL_RATE 50
     
     htim->Instance->PSC = 55000-1;
     htim->Instance->ARR = (WIZNET_TIM_CLK / 55000) / WIZNET_POLL_RATE - 1;

@@ -45,6 +45,8 @@ static void updateInternalTime(uint32_t ntp_time);
 void initTime(TIM_HandleTypeDef *htim) {
 	UNIXTimerInstance = htim;
 	// Period (ARR) = 1,000,000 - 1 (so it overflows after 1 million ticks = 1 second)
+	#define UNIX_TIM_CLK 275000000
+
 	htim->Instance->PSC = (UNIX_TIM_CLK / 1000000) - 1;
 	htim->Instance->ARR = 1000000 - 1;
 	htim->Instance->CNT = 0;

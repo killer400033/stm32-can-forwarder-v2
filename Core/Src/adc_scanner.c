@@ -39,6 +39,10 @@ void ADC_Scanner_Init(TIM_HandleTypeDef *htim)
 
   ADCTimerInstance = htim;
 
+	#define ADC_TIM_CLK 275000000  // Timer clock frequency in Hz
+	#define ADC_SAMPLE_RATE 10  // ADC sampling rate (Hz)
+
+
   htim->Instance->PSC = 55000-1;
   htim->Instance->ARR = (ADC_TIM_CLK / 55000) / ADC_SAMPLE_RATE - 1;
   htim->Instance->CNT = 0;

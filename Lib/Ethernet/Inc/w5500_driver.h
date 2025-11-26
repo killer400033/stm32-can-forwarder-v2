@@ -8,6 +8,9 @@
 extern "C" {
 #endif
 
+extern uint32_t enqueueFailsInISR;
+extern uint32_t commandRetries;
+
 /**
  * @brief WIZNET W5500 interrupt callback
  * @note Call this function from your GPIO EXTI interrupt handler when W5500 INT pin triggers

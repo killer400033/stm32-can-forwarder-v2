@@ -35,6 +35,7 @@
 #include "adc_scanner.h"
 #include "log_handler.h"
 #include "w5500_driver.h"
+#include "stats.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -1293,6 +1294,9 @@ void StartDefaultTask(void *argument)
 
   // Initialize ADC Scanner with TIM7
   ADC_Scanner_Init(&htim7);
+
+  // Initialize statistics monitoring
+  initStats();
 
   CanFrame canDataReceived = {0};
   canDataReceived.can_bus = 2;

@@ -13,7 +13,6 @@ extern "C" {
 #define NTP_RETRY_CNT 5
 #define UTC_OFFSET +1000
 #define UTC_UNIX_OFFSET (UTC_OFFSET/100)*3600 + (UTC_OFFSET%100)*60 // Calculates UTC offset in seconds
-#define UNIX_TIM_CLK 550000000
 
 #define NTP_SERVER_DOMAIN "time.nist.gov"
 
