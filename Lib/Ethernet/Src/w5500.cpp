@@ -30,15 +30,16 @@ static GPIO_TypeDef* wiznet_cs_port = NULL;
 static uint16_t wiznet_cs_pin = 0;
 
 /**
- * @brief Configure W5500 hardware (SPI and CS pin)
+ * @brief Configure W5500 hardware (SPI, CS pin, and timer)
  * @warning Must be called before initWizchip()
  * @param hspi SPI handle for W5500 communication
  * @param cs_port GPIO port for CS pin (e.g., GPIOA)
  * @param cs_pin GPIO pin for CS (e.g., GPIO_PIN_4)
+ * @param htim Timer handle for periodic socket polling
  * @return SOCK_OK (0) on success, SOCKERR_INVALID_PARAM if parameters are invalid
  */
-int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t cs_pin) {
-    if (hspi == NULL || cs_port == NULL) {
+int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t cs_pin, TIM_HandleTypeDef* htim) {
+    if (hspi == NULL || cs_port == NULL || htim == NULL) {
         return SOCKERR_INVALID_PARAM;
     }
 
@@ -48,6 +49,20 @@ int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t c
     
     // Initialize CS pin to deselected (high)
     HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_SET);
+    
+    // Configure timer (550MHz)
+    #define WIZNET_TIM_CLK 550000000
+    #define WIZNET_POLL_RATE 100
+    
+    htim->Instance->PSC = 55000-1;
+    htim->Instance->ARR = (WIZNET_TIM_CLK / 55000) / WIZNET_POLL_RATE - 1;
+    htim->Instance->CNT = 0;
+    
+    // Generate update event to load the prescaler value
+    htim->Instance->EGR = TIM_EGR_UG;
+    
+    // Start timer with update (overflow) interrupt
+    HAL_TIM_Base_Start_IT(htim);
     
     return SOCK_OK;
 }
@@ -441,6 +456,9 @@ static void dmaTXCompleteCallback(void) {
         case CHECK_RCV:
             HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
             break;
+        case CHECK_TX_FSR:
+            HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            break;
         default:
             // CS deselect (set high) - for unknown command types
             HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_SET);
@@ -530,14 +548,17 @@ static void dmaRXCompleteCallback(void) {
 
             if (socket->registers.IR & Sn_IR_TIMEOUT) {
                 uint32_t isrm_timeout = taskENTER_CRITICAL_FROM_ISR();
-                buffer_segment_t segment;
 
-                // This is only relevant in UDP mode, because in TCP mode, the socket is closed when the timeout occurs and reopening will wipe the queue
-                queuePopFront(&socket->tx_buf_queue, &segment);
                 socket->is_sending = false;
 
-                // In UDP mode, the socket remains open, so we will send the next pending data
-                if (socket->registers.MR & Sn_MR_UDP) {
+                if (socket->registers.MR & Sn_MR_TCP) {
+                    // In TCP mode, clear tx buffer just incase after timeout
+                    queueClear(&socket->tx_buf_queue);
+                }
+                else {
+                    // In UDP/MACRAW mode, the socket remains open, so we will send the next pending data
+                    buffer_segment_t segment;
+                    queuePopFront(&socket->tx_buf_queue, &segment);
                     sendPendingData(running_cmd.sn);
                 }
 
@@ -583,6 +604,16 @@ static void dmaRXCompleteCallback(void) {
             taskEXIT_CRITICAL_FROM_ISR(isrm);
             break;
         }
+        case CHECK_TX_FSR: {
+            if (socket == NULL) break;
+
+            memcpy(running_cmd.ptr, &(running_cmd.inline_buf[3]), running_cmd.len - 3);
+
+            uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+            sendPendingData(running_cmd.sn);
+            taskEXIT_CRITICAL_FROM_ISR(isrm);
+            break;
+        }
         default:
             break;
     }
@@ -591,14 +622,20 @@ static void dmaRXCompleteCallback(void) {
 // **MUST BE CALLED INSIDE A CRITICAL SECTION**
 void sendPendingData(uint8_t sn) {
     if (sockets[sn].is_sending) return;
+    if (sockets[sn].registers.SR != SOCK_ESTABLISHED && sockets[sn].registers.SR != SOCK_CLOSE_WAIT && sockets[sn].registers.SR != SOCK_UDP) return;
 
     buffer_segment_t segment;
     // Just peek front, will be popped when send is complete
     if (queuePeekFront(&sockets[sn].tx_buf_queue, &segment)) {
-        sockets[sn].is_sending = true;
-
         command_t cmd;
+        uint32_t tx_wr = GET_U16(sockets[sn].registers.TX_WR);
+        uint32_t addr = ((uint32_t)tx_wr << 8) + (WIZCHIP_TXBUF_BLOCK(sn) << 3);
+        uint32_t len = segment.end_index - segment.start_index;
 
+        // Check if there is enough space in the WIZNET TX buffer
+        if (len - 3 > GET_U16(sockets[sn].registers.TX_FSR)) {
+            return;
+        }
         // If UDP, set destination address and port
         if (sockets[sn].registers.MR & Sn_MR_UDP) {
             generateSetRegCmd(&cmd, sn, Sn_DIPR(sn), segment.addr, 4);
@@ -613,9 +650,6 @@ void sendPendingData(uint8_t sn) {
             }
         }
         
-        uint32_t tx_wr = GET_U16(sockets[sn].registers.TX_WR);
-        uint32_t addr = ((uint32_t)tx_wr << 8) + (WIZCHIP_TXBUF_BLOCK(sn) << 3);
-        uint32_t len = segment.end_index - segment.start_index;
         generateSetBufCmd(&cmd, sn, addr, sockets[sn].tx_buf + segment.start_index, len);
         if (!queuePushBack(&command_queue, cmd)) {
             enqueueFailsInISR++;
@@ -633,12 +667,15 @@ void sendPendingData(uint8_t sn) {
         if (!queuePushBack(&command_queue, cmd)) {
             enqueueFailsInISR++;
         }
+
+        sockets[sn].is_sending = true;
     }
 }
 
 // **MUST BE CALLED INSIDE A CRITICAL SECTION**
 void receivePendingData(uint8_t sn) {
     if (sockets[sn].is_receiving) return;
+    if (sockets[sn].registers.SR != SOCK_ESTABLISHED && sockets[sn].registers.SR != SOCK_CLOSE_WAIT && sockets[sn].registers.SR != SOCK_UDP) return;
 
     uint16_t rx_rsr = GET_U16(sockets[sn].registers.RX_RSR);
     if (rx_rsr > 0) {
@@ -646,8 +683,6 @@ void receivePendingData(uint8_t sn) {
 
         int32_t rx_buf_index = getRXBufferIndex(&sockets[sn], rx_rsr + 3);
         if (rx_buf_index != -1) {
-            sockets[sn].is_receiving = true;
-
             uint16_t rx_rd = GET_U16(sockets[sn].registers.RX_RD);
             uint32_t ptr = rx_rd;
             uint32_t addr = ((uint32_t)ptr << 8) + (WIZCHIP_RXBUF_BLOCK(sn) << 3);
@@ -677,6 +712,8 @@ void receivePendingData(uint8_t sn) {
             if (!queuePushBack(&command_queue, cmd)) {
                 enqueueFailsInISR++;
             }
+
+            sockets[sn].is_receiving = true;
         }
     }
 }
@@ -727,4 +764,28 @@ static inline void generateGetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, 
     cmd->ptr[1] = (addr >> 8) & 0xFF;
     cmd->ptr[2] = addr & 0xFF;
     cmd->len = len;
+}
+
+/**
+ * @brief Timer interrupt callback for periodic socket polling
+ * Called when the Wiznet timer overflows
+ * Checks each socket and enqueues CHECK_TX_FSR command if socket is ESTABLISHED
+ */
+void Wiznet_Timer_Callback(void)
+{
+    for (uint8_t sn = 0; sn < _WIZCHIP_SOCK_NUM_; sn++) {
+        // Check if socket is in ESTABLISHED state
+        if (sockets[sn].registers.SR == SOCK_ESTABLISHED) {
+            // Update TX_FSR, TX_RD and TX_WR
+            command_t cmd;
+            generateGetRegCmd(&cmd, sn, Sn_TX_FSR(sn), (uint8_t*)sockets[sn].registers.TX_FSR, 6);
+            cmd.cmd_type = CHECK_TX_FSR;
+            
+            uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+            if (!queuePushBack(&command_queue, cmd)) {
+                enqueueFailsInISR++;
+            }
+            taskEXIT_CRITICAL_FROM_ISR(isrm);
+        }
+    }
 }

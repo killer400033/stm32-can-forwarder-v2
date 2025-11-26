@@ -6,7 +6,8 @@
 #include "log_handler.h"
 #include "w5500_driver.h"
 
-SPI_HandleTypeDef *wiznet_hspi1;
+SPI_HandleTypeDef *wiznet_hspi;
+TIM_HandleTypeDef *wiznet_htim;
 
 // Default network configuration
 wiz_NetInfo net_info = {
@@ -19,14 +20,17 @@ wiz_NetInfo net_info = {
 
 /**
  * @brief Initialize W5500 chip with new driver
+ * @param hspi SPI handle for W5500 communication
+ * @param htim Timer handle for periodic socket polling
  */
-void W5500Init(SPI_HandleTypeDef *hspi1) {
-		wiznet_hspi1 = hspi1;
+void W5500Init(SPI_HandleTypeDef *hspi, TIM_HandleTypeDef *htim) {
+		wiznet_hspi = hspi;
+    wiznet_htim = htim;
     // Small delay for chip power-up
     osDelay(500);
     
-    // Step 1: Configure hardware (SPI and CS pin)
-    int result = setWiznetHardware(wiznet_hspi1, SPI1_CS_GPIO_Port, SPI1_CS_Pin);
+    // Step 1: Configure hardware (SPI, CS pin, and timer)
+    int result = setWiznetHardware(wiznet_hspi, SPI1_CS_GPIO_Port, SPI1_CS_Pin, htim);
     if (result != 0) {
         log_msg(LL_ERR, "Failed to set W5500 hardware: %d", result);
         return;

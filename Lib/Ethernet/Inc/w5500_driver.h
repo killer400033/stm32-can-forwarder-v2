@@ -35,7 +35,7 @@ void wiznetSPITxCompleteCallback(void);
  * @param cs_pin GPIO pin for CS (e.g., GPIO_PIN_4)
  * @return SOCK_OK (0) on success, SOCKERR_INVALID_PARAM if parameters are invalid
  */
-int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t cs_pin);
+int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t cs_pin, TIM_HandleTypeDef* htim);
 
 /**
  * @brief Initialize W5500 chip with network configuration
@@ -50,6 +50,9 @@ int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t c
  */
 int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip, 
                 const uint8_t* rx_buf_sizes, const uint8_t* tx_buf_sizes);
+
+// Timer callback for periodic socket polling
+void Wiznet_Timer_Callback(void);
 
 #ifdef __cplusplus
 }

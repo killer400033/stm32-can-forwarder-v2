@@ -28,7 +28,8 @@ typedef enum {
     READ_SIR = 4, // Read SIR register from WIZNET
     READ_SOC = 5, // Read full socket registers from WIZNET
     CHECK_RCV = 6, // Read RX_RSR and RX_RD and enqueue RECV command if there is data to receive
-    IDLE = 7, // Nothing is running, queue is empty
+    CHECK_TX_FSR = 7, // Read TX_FSR and enqueue SEND command if there is space in the WIZNET TX buffer
+    IDLE = 8, // Nothing is running, queue is empty
 } command_type_t;
 
 typedef struct {

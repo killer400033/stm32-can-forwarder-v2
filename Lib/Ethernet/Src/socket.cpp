@@ -29,12 +29,14 @@ int socket(uint8_t sn, uint8_t protocol, uint16_t port, uint8_t* tx_buf, uint16_
     }
 
     // Clear socket send and receive queues
+    taskENTER_CRITICAL();
     queueClear(&sockets[sn].tx_buf_queue);
     queueClear(&sockets[sn].rx_buf_queue);
 
     // Reset states
     sockets[sn].is_sending = false;
     sockets[sn].is_receiving = false;
+    taskEXIT_CRITICAL();
 
     // Store callback
     sockets[sn].callback = callback;
@@ -70,6 +72,15 @@ int socket(uint8_t sn, uint8_t protocol, uint16_t port, uint8_t* tx_buf, uint16_
     // Write Sn_CR (Command Register) - OPEN
     uint8_t open_cmd = Sn_CR_OPEN;
     if (!enqueueSetReg(sn, Sn_CR(sn), &open_cmd, 1)) {
+        return SOCKERR_QUEUE_FULL;
+    }
+
+    // Get TX_RSR, TX_WR and TX_RD
+    if (!enqueueGetReg(sn, Sn_TX_FSR(sn), (uint8_t*)&sockets[sn].registers.TX_FSR, 6)) {
+        return SOCKERR_QUEUE_FULL;
+    }
+    // Get RX_RSR, RX_WR and RX_RD
+    if (!enqueueGetReg(sn, Sn_RX_RSR(sn), (uint8_t*)&sockets[sn].registers.RX_RSR, 6)) {
         return SOCKERR_QUEUE_FULL;
     }
 

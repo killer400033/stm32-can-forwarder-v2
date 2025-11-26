@@ -139,11 +139,11 @@ void appLayerThread(void *argument) {
 
 		// Handle state transitions
 		if (ws_client_get_state() == WS_STATE_CONNECTED && !connected) {
-			log_msg(LL_DBG, "WebSocket connected!");
+			log_msg(LL_DBG, "WebSocket Connected!");
 			connected = true;
 		}
 		if ((ws_client_get_state() == WS_STATE_DISCONNECTED) && connected) {
-			log_msg(LL_WRN, "WebSocket disconnected...");
+			log_msg(LL_WRN, "WebSocket Disconnected...");
 			connected = false;
 		}
 

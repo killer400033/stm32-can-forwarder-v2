@@ -9,7 +9,8 @@
 extern "C" {
 #endif
 
-extern SPI_HandleTypeDef *wiznet_hspi1;
+extern SPI_HandleTypeDef *wiznet_hspi;
+extern TIM_HandleTypeDef *wiznet_htim;
 
 // Socket assignments
 #define DHCP_SOCKET     0
@@ -27,8 +28,10 @@ typedef struct {
 
 /**
  * @brief Initialize W5500 chip
+ * @param hspi SPI handle for W5500 communication
+ * @param htim Timer handle for periodic socket polling
  */
-void W5500Init(SPI_HandleTypeDef *hspi1);
+void W5500Init(SPI_HandleTypeDef *hspi, TIM_HandleTypeDef *htim);
 
 #ifdef __cplusplus
 }
