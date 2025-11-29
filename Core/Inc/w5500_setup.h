@@ -15,7 +15,7 @@ extern TIM_HandleTypeDef *wiznet_htim;
 // Socket assignments
 #define DHCP_SOCKET     0
 #define DNS_SOCKET      1
-#define WS_SOCKET       2
+#define STREAM_SOCKET   2
 #define NTP_SOCKET      3
 #define MAX_HTTPSOCK    6
 

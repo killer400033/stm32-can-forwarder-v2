@@ -17,6 +17,15 @@
 #include "cmsis_os.h"
 #include "socket.h"
 
+// Internal helper functions (not for public use)
+static int8_t _dns_build_query(const char* hostname, uint16_t qtype, uint8_t* buffer, uint16_t* length);
+static int8_t _dns_parse_response(const uint8_t* buffer, uint16_t length, dns_response_t* response);
+static int8_t _dns_encode_name(const char* hostname, uint8_t* buffer, uint16_t* length);
+static int8_t _dns_decode_name(const uint8_t* buffer, uint16_t buffer_len, uint16_t* offset, char* name, uint16_t name_len);
+static uint16_t _dns_generate_id(void);
+static bool _dns_is_valid_hostname(const char* hostname);
+static int8_t _dns_query(const char* hostname, uint16_t qtype, dns_response_t* response);
+
 // External HAL functions (assuming STM32 HAL)
 extern uint32_t HAL_GetTick(void);
 
@@ -25,6 +34,7 @@ static dns_config_t g_dns_config = {0};
 
 static bool g_dns_initialized = false;
 static uint16_t g_transaction_id = 1;
+static uint16_t g_source_port = 0;
 
 // Query and response buffers
 static uint8_t query_buffer[DNS_MAX_PACKET_SIZE];
@@ -66,8 +76,8 @@ int8_t dns_init(dns_config_t* config)
     }
     
     // Initialize socket for UDP with random source port
-    uint16_t source_port = 50000 + (HAL_GetTick() % 10000); // Random port between 50000-59999
-    int result = socket(g_dns_config.socket_num, SOCKET_PROTOCOL_UDP, source_port,
+    g_source_port = 50000 + (HAL_GetTick() % 10000); // Random port between 50000-59999
+    int result = socket(g_dns_config.socket_num, SOCKET_PROTOCOL_UDP, g_source_port,
                        g_dns_config.tx_buf, g_dns_config.tx_buf_len,
                        g_dns_config.rx_buf, g_dns_config.rx_buf_len, NULL);
     if (result != SOCK_OK) {
@@ -81,7 +91,7 @@ int8_t dns_init(dns_config_t* config)
 /**
  * @brief Generate unique transaction ID
  */
-uint16_t _dns_generate_id(void)
+static uint16_t _dns_generate_id(void)
 {
     return g_transaction_id++;
 }
@@ -89,7 +99,7 @@ uint16_t _dns_generate_id(void)
 /**
  * @brief Validate hostname format
  */
-bool _dns_is_valid_hostname(const char* hostname)
+static bool _dns_is_valid_hostname(const char* hostname)
 {
     if (hostname == NULL || strlen(hostname) == 0 || strlen(hostname) > DNS_MAX_NAME_LENGTH) {
         return false;
@@ -122,7 +132,7 @@ bool _dns_is_valid_hostname(const char* hostname)
 /**
  * @brief Encode domain name in DNS format
  */
-int8_t _dns_encode_name(const char* hostname, uint8_t* buffer, uint16_t* length)
+static int8_t _dns_encode_name(const char* hostname, uint8_t* buffer, uint16_t* length)
 {
     if (hostname == NULL || buffer == NULL || length == NULL) {
         return DNS_ERROR_INVALID_PARAM;
@@ -159,7 +169,7 @@ int8_t _dns_encode_name(const char* hostname, uint8_t* buffer, uint16_t* length)
 /**
  * @brief Decode domain name from DNS format
  */
-int8_t _dns_decode_name(const uint8_t* buffer, uint16_t buffer_len, uint16_t* offset, char* name, uint16_t name_len)
+static int8_t _dns_decode_name(const uint8_t* buffer, uint16_t buffer_len, uint16_t* offset, char* name, uint16_t name_len)
 {
     if (buffer == NULL || offset == NULL || name == NULL) {
         return DNS_ERROR_INVALID_PARAM;
@@ -207,7 +217,7 @@ int8_t _dns_decode_name(const uint8_t* buffer, uint16_t buffer_len, uint16_t* of
 /**
  * @brief Build DNS query packet
  */
-int8_t _dns_build_query(const char* hostname, uint16_t qtype, uint8_t* buffer, uint16_t* length)
+static int8_t _dns_build_query(const char* hostname, uint16_t qtype, uint8_t* buffer, uint16_t* length)
 {
     if (hostname == NULL || buffer == NULL || length == NULL) {
         return DNS_ERROR_INVALID_PARAM;
@@ -261,7 +271,7 @@ int8_t _dns_build_query(const char* hostname, uint16_t qtype, uint8_t* buffer, u
 /**
  * @brief Skip DNS name in packet (optimized helper)
  */
-int8_t _dns_skip_name(const uint8_t* buffer, uint16_t length, uint16_t* pos)
+static int8_t _dns_skip_name(const uint8_t* buffer, uint16_t length, uint16_t* pos)
 {
     if (buffer == NULL || pos == NULL || *pos >= length) {
         return DNS_ERROR_INVALID_PARAM;
@@ -297,7 +307,7 @@ int8_t _dns_skip_name(const uint8_t* buffer, uint16_t length, uint16_t* pos)
 /**
  * @brief Parse DNS response packet (optimized for A records)
  */
-int8_t _dns_parse_response(const uint8_t* buffer, uint16_t length, dns_response_t* response)
+static int8_t _dns_parse_response(const uint8_t* buffer, uint16_t length, dns_response_t* response)
 {
     if (buffer == NULL || response == NULL || length < DNS_HEADER_SIZE) {
         return DNS_ERROR_INVALID_PARAM;
@@ -407,7 +417,7 @@ int8_t _dns_parse_response(const uint8_t* buffer, uint16_t length, dns_response_
 /**
  * @brief Send DNS query and receive response
  */
-int8_t dns_query(const char* hostname, uint16_t qtype, dns_response_t* response)
+static int8_t _dns_query(const char* hostname, uint16_t qtype, dns_response_t* response)
 {
     if (!g_dns_initialized) {
         return DNS_ERROR_SOCKET_FAIL;
@@ -471,6 +481,17 @@ int8_t dns_resolve_a(const char* hostname, uint8_t* ip_addr, uint32_t* ttl)
     if (hostname == NULL || ip_addr == NULL) {
         return DNS_ERROR_INVALID_PARAM;
     }
+
+    // Check if socket is open
+    if (getSocketStatus(g_dns_config.socket_num) != SOCKET_UDP) {
+        int result = socket(g_dns_config.socket_num, SOCKET_PROTOCOL_UDP, g_source_port,
+            g_dns_config.tx_buf, g_dns_config.tx_buf_len,
+            g_dns_config.rx_buf, g_dns_config.rx_buf_len, NULL);
+        
+        if (result != SOCK_OK) {
+            return DNS_ERROR_SOCKET_FAIL;
+        }
+    }
     
     // Follow CNAME chains up to a reasonable depth to avoid loops
     // Use static buffer to avoid stack overflow
@@ -479,7 +500,7 @@ int8_t dns_resolve_a(const char* hostname, uint8_t* ip_addr, uint32_t* ttl)
     
     const uint8_t max_depth = 5;
     for (uint8_t depth = 0; depth < max_depth; depth++) {
-        int8_t result = dns_query(current_name, DNS_TYPE_A, &dns_response);
+        int8_t result = _dns_query(current_name, DNS_TYPE_A, &dns_response);
         if (result != DNS_OK) {
             return result;
         }

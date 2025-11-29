@@ -212,15 +212,6 @@ uint32_t ntp_to_unix_timestamp(const ntp_time_t* ntp_time);
  */
 void ntp_from_unix_timestamp(uint32_t unix_timestamp, ntp_time_t* ntp_time);
 
-// Internal helper functions (not for public use)
-int8_t _ntp_build_request(ntp_packet_t* packet);
-int8_t _ntp_parse_response(const uint8_t* buffer, uint16_t length, ntp_response_t* response);
-int8_t _ntp_send_request(void);
-int8_t _ntp_receive_response(ntp_response_t* response);
-uint32_t _ntp_get_current_time(void);
-void _ntp_swap_endian_32(uint32_t* value);
-void _ntp_swap_endian_ntp_time(ntp_time_t* ntp_time);
-
 #ifdef __cplusplus
 }
 #endif

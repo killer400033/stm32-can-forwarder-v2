@@ -15,6 +15,15 @@
 #include <stdio.h>
 #include "socket.h"
 
+// Internal helper functions (not for public use)
+static int8_t _ntp_build_request(ntp_packet_t* packet);
+static int8_t _ntp_parse_response(const uint8_t* buffer, uint16_t length, ntp_response_t* response);
+static int8_t _ntp_send_request(void);
+static int8_t _ntp_receive_response(ntp_response_t* response);
+static uint32_t _ntp_get_current_time(void);
+static void _ntp_swap_endian_32(uint32_t* value);
+static void _ntp_swap_endian_ntp_time(ntp_time_t* ntp_time);
+
 // External HAL functions (assuming STM32 HAL)
 extern uint32_t HAL_GetTick(void);
 
@@ -24,6 +33,7 @@ extern void osDelay(uint32_t ticks);
 // Global NTP configuration
 static ntp_config_t g_ntp_config = {0};
 static bool g_ntp_initialized = false;
+static uint16_t g_source_port = 0;
 
 // Static buffers to avoid stack usage (each 48 bytes)
 static ntp_packet_t ntp_request_packet;
@@ -70,10 +80,10 @@ int8_t ntp_init(ntp_config_t* config)
     }
     
     // Generate random source port (1024-50000)
-    uint16_t source_port = 40000 + (HAL_GetTick() % 10000); // Random port between 40000-49999
+    g_source_port = 40000 + (HAL_GetTick() % 10000); // Random port between 40000-49999
     
     // Initialize socket for UDP with provided buffers
-    int8_t result = socket(g_ntp_config.socket_num, SOCKET_PROTOCOL_UDP, source_port,
+    int8_t result = socket(g_ntp_config.socket_num, SOCKET_PROTOCOL_UDP, g_source_port,
                           g_ntp_config.tx_buf, g_ntp_config.tx_buf_len,
                           g_ntp_config.rx_buf, g_ntp_config.rx_buf_len, NULL);
     if (result != SOCK_OK) {
@@ -87,7 +97,7 @@ int8_t ntp_init(ntp_config_t* config)
 /**
  * @brief Swap endianness of 32-bit value
  */
-void _ntp_swap_endian_32(uint32_t* value)
+static void _ntp_swap_endian_32(uint32_t* value)
 {
     uint32_t temp = *value;
     *value = ((temp & 0xFF000000) >> 24) |
@@ -99,7 +109,7 @@ void _ntp_swap_endian_32(uint32_t* value)
 /**
  * @brief Swap endianness of NTP time structure
  */
-void _ntp_swap_endian_ntp_time(ntp_time_t* ntp_time)
+static void _ntp_swap_endian_ntp_time(ntp_time_t* ntp_time)
 {
     _ntp_swap_endian_32(&ntp_time->seconds);
     _ntp_swap_endian_32(&ntp_time->fractional);
@@ -108,7 +118,7 @@ void _ntp_swap_endian_ntp_time(ntp_time_t* ntp_time)
 /**
  * @brief Get current time in NTP format (simplified)
  */
-uint32_t _ntp_get_current_time(void)
+static uint32_t _ntp_get_current_time(void)
 {
     // This is a simplified implementation
     // In a real application, you might want to use a more accurate time source
@@ -118,7 +128,7 @@ uint32_t _ntp_get_current_time(void)
 /**
  * @brief Build NTP request packet
  */
-int8_t _ntp_build_request(ntp_packet_t* packet)
+static int8_t _ntp_build_request(ntp_packet_t* packet)
 {
     if (packet == NULL) {
         return NTP_ERROR_INVALID_PARAM;
@@ -181,7 +191,7 @@ int8_t _ntp_build_request(ntp_packet_t* packet)
 /**
  * @brief Parse NTP response packet
  */
-int8_t _ntp_parse_response(const uint8_t* buffer, uint16_t length, ntp_response_t* response)
+static int8_t _ntp_parse_response(const uint8_t* buffer, uint16_t length, ntp_response_t* response)
 {
     if (buffer == NULL || response == NULL || length < NTP_PACKET_SIZE) {
         return NTP_ERROR_INVALID_PARAM;
@@ -226,7 +236,7 @@ int8_t _ntp_parse_response(const uint8_t* buffer, uint16_t length, ntp_response_
 /**
  * @brief Send NTP request
  */
-int8_t _ntp_send_request(void)
+static int8_t _ntp_send_request(void)
 {
     int8_t result = _ntp_build_request(&ntp_request_packet);
     if (result != NTP_OK) {
@@ -246,7 +256,7 @@ int8_t _ntp_send_request(void)
 /**
  * @brief Receive NTP response
  */
-int8_t _ntp_receive_response(ntp_response_t* response)
+static int8_t _ntp_receive_response(ntp_response_t* response)
 {
     uint8_t peer_ip[4];
     uint16_t peer_port;
@@ -285,6 +295,17 @@ int8_t ntp_get_time(uint32_t* timestamp)
     if (timestamp == NULL) {
         return NTP_ERROR_INVALID_PARAM;
     }
+
+    // Check if socket is open
+    if (getSocketStatus(g_ntp_config.socket_num) != SOCKET_UDP) {
+        int result = socket(g_ntp_config.socket_num, SOCKET_PROTOCOL_UDP, g_source_port,
+            g_ntp_config.tx_buf, g_ntp_config.tx_buf_len,
+            g_ntp_config.rx_buf, g_ntp_config.rx_buf_len, NULL);
+        
+        if (result != SOCK_OK) {
+            return NTP_ERROR_SOCKET_FAIL;
+        }
+    }
     
     ntp_response_t response;
     int8_t result = ntp_get_response(&response);
@@ -310,6 +331,17 @@ int8_t ntp_get_response(ntp_response_t* response)
     
     if (response == NULL) {
         return NTP_ERROR_INVALID_PARAM;
+    }
+
+    // Check if socket is open
+    if (getSocketStatus(g_ntp_config.socket_num) != SOCKET_UDP) {
+        int result = socket(g_ntp_config.socket_num, SOCKET_PROTOCOL_UDP, g_source_port,
+            g_ntp_config.tx_buf, g_ntp_config.tx_buf_len,
+            g_ntp_config.rx_buf, g_ntp_config.rx_buf_len, NULL);
+        
+        if (result != SOCK_OK) {
+            return NTP_ERROR_SOCKET_FAIL;
+        }
     }
     
     // Send request with retries

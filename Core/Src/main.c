@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "app_layer.h"
+#include "stream.h"
 #include "unix_time.h"
 #include "can_driver.h"
 #include "forwarder_pb.pb.h"
@@ -1322,6 +1323,7 @@ void StartDefaultTask(void *argument)
   // Begin storage thread
   initStorage();
 
+
   W5500Init(&hspi1, &htim13);
 
   // Initialize DNS Thread
@@ -1330,8 +1332,8 @@ void StartDefaultTask(void *argument)
   // Initialize UNIX time Thread
   initTime(&htim2);
 
-  // Begin application layer thread
-  initAppLayer(&hrng);
+  // Begin streaming thread
+  initStream();
 
   // Initialize and start FDCAN peripherals
   initCAN();
@@ -1350,10 +1352,11 @@ void StartDefaultTask(void *argument)
 
   for(;;) {
 		// Process messages from canRecQueue and distribute to other queues
-		osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever);
-		if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
+		//osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever);
+		while (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
 			osMessageQueuePut(wsCanQueueHandle, &canDataReceived, 0, 0);
 		}
+		/*
 		else {
 			if (osMessageQueueGetSpace(storageCanQueueHandle) > 0) {
 				osMessageQueuePut(storageCanQueueHandle, &canDataReceived, 0, 0);
@@ -1363,6 +1366,7 @@ void StartDefaultTask(void *argument)
 			}
 
 		}
+		*/
 		osThreadYield();
   }
   /* USER CODE END 5 */

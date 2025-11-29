@@ -86,9 +86,9 @@ void appLayerThread(void *argument) {
 
 	// Initialize WebSocket client with new API
 	ws_config_t ws_config = {
-		.socket_num = WS_SOCKET,
+		.socket_num = STREAM_SOCKET,
 		.host = {0, 0, 0, 0},  // Will be set after DNS resolution
-		.port = 80,
+		.port = 9010,
 		.path = WS_DOMAIN_PATH,
 		.tx_buf = ws_tx_buf,
 		.tx_buf_len = sizeof(ws_tx_buf),
@@ -120,7 +120,8 @@ void appLayerThread(void *argument) {
 
 		// Update WebSocket config with resolved IP (only needs to be done once)
 		if (has_valid_ip && ws_config.host[0] == 0) {
-			memcpy(ws_config.host, ws_server_ip, 4);
+			uint8_t temp[4] = {192, 168, 1, 2};
+			memcpy(ws_config.host, temp, 4);
 			ws_client_init(&ws_config);
 		}
 
