@@ -25,7 +25,7 @@ volatile uint64_t unixMicroseconds[3];
  */
 void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 	FDCAN_RxHeaderTypeDef rxHeader;
-	uint8_t rxData[8];
+	uint8_t rxData[64];
 	CanFrame canFrame;
 	uint32_t fifoFillLevel;
 
@@ -63,6 +63,7 @@ void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 			fifoFillLevel--;
 		} else {
 			can_read_errors++;
+			fifoFillLevel = HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0);
 			break;
 		}
 	}

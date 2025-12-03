@@ -52,7 +52,7 @@ int setWiznetHardware(SPI_HandleTypeDef* hspi, GPIO_TypeDef* cs_port, uint16_t c
     
     // Configure timer (550MHz)
     #define WIZNET_TIM_CLK 275000000
-    #define WIZNET_POLL_RATE 50
+    #define WIZNET_POLL_RATE 25
     
     htim->Instance->PSC = 55000-1;
     htim->Instance->ARR = (WIZNET_TIM_CLK / 55000) / WIZNET_POLL_RATE - 1;
@@ -773,6 +773,19 @@ static inline void generateGetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, 
  */
 void Wiznet_Timer_Callback(void)
 {
+    // Enter critical section for ISR
+    uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+    
+    // Read Socket Interrupts Regularly incase some were missed
+    command_t cmd;
+    generateGetRegCmd(&cmd, 0xFF, W5500_SIR, &common_regs.SIR, 1);
+    cmd.cmd_type = READ_SIR;
+    
+    if (!queuePushBack(&command_queue, cmd)) {
+        enqueueFailsInISR++;
+    }
+
+    // For TCP sockets in ESTABLISHED state, check TX_FSR to send pending data
     for (uint8_t sn = 0; sn < _WIZCHIP_SOCK_NUM_; sn++) {
         // Check if socket is in ESTABLISHED state
         if (sockets[sn].registers.SR == SOCK_ESTABLISHED) {
@@ -781,11 +794,11 @@ void Wiznet_Timer_Callback(void)
             generateGetRegCmd(&cmd, sn, Sn_TX_FSR(sn), (uint8_t*)sockets[sn].registers.TX_FSR, 6);
             cmd.cmd_type = CHECK_TX_FSR;
             
-            uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
             if (!queuePushBack(&command_queue, cmd)) {
                 enqueueFailsInISR++;
             }
-            taskEXIT_CRITICAL_FROM_ISR(isrm);
         }
     }
+    
+    taskEXIT_CRITICAL_FROM_ISR(isrm);
 }
