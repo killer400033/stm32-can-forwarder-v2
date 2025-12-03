@@ -1,5 +1,19 @@
 #include "dbc.h"
 
+// Unpack signals from DRIVER_SELECTED_KP
+int8_t Unpack_DRIVER_SELECTED_KP(DRIVER_SELECTED_KP_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 1u) return STATUS_ERROR;
+
+	// Extracting TorqueVectoringEnable
+	_m->TorqueVectoringEnable = ((_d[0] & 0x80u) >> 7u);
+	// Extracting RegenEnable
+	_m->RegenEnable = ((_d[0] & 0x40u) >> 6u);
+	// Extracting ScaleKp
+	_m->ScaleKp = ((_d[0] & 0x3eu) >> 1u);
+
+	return STATUS_OK;
+}
+
 // Unpack signals from FRONT_IMU_VELOCITY_NORMAL
 int8_t Unpack_FRONT_IMU_VELOCITY_NORMAL(FRONT_IMU_VELOCITY_NORMAL_t* _m, const uint8_t* _d, uint8_t len) {
 	if (len < 6u) return STATUS_ERROR;
@@ -646,72 +660,84 @@ int8_t Unpack_TIMESTAMP_READING(TIMESTAMP_READING_t* _m, const uint8_t* _d, uint
 
 // Unpack signals from RTD_MODES_FLASH
 int8_t Unpack_RTD_MODES_FLASH(RTD_MODES_FLASH_t* _m, const uint8_t* _d, uint8_t len) {
-	if (len < 2u) return STATUS_ERROR;
+	if (len < 8u) return STATUS_ERROR;
 
-	// Extracting RTDMode
-	_m->RTDMode = ((_d[0] & 0xe0u) >> 5u);
-	// Extracting TorqueLimit
-	_m->TorqueLimit = ((_d[0] & 0x18u) >> 3u);
-	// Extracting PowerLimit
-	_m->PowerLimit = ((_d[0] & 0x06u) >> 1u);
-	// Extracting RegenLimit
-	_m->RegenLimit = ((_d[0] & 0x01u) << 1u) | ((_d[1] & 0x80u) >> 7u);
-	// Extracting RegenMode
-	_m->RegenMode = ((_d[1] & 0x60u) >> 5u);
-	// Extracting TorqueVectoringMode
-	_m->TorqueVectoringMode = ((_d[1] & 0x18u) >> 3u);
-	// Extracting SpeedSetPoint
-	_m->SpeedSetPoint = ((_d[1] & 0x04u) >> 2u);
-	// Extracting LaunchDisable
-	_m->LaunchDisable = ((_d[1] & 0x02u) >> 1u);
+	// Extracting RTDModeF
+	_m->RTDModeF = ((_d[0] & 0xe0u) >> 5u);
+	// Extracting TotalTorqueLimitF
+	_m->TotalTorqueLimitF = ((_d[0] & 0x1fu) << 3u) | ((_d[1] & 0xe0u) >> 5u);
+	// Extracting PWTorqueLF
+	_m->PWTorqueLF = ((_d[1] & 0x1fu) >> 0u);
+	// Extracting PowerLimitF
+	_m->PowerLimitF = ((_d[2] & 0xffu) << 12u) | ((_d[3] & 0xffu) << 4u) | ((_d[4] & 0xf0u) >> 4u);
+	// Extracting RegenModeF
+	_m->RegenModeF = ((_d[4] & 0x0cu) >> 2u);
+	// Extracting TRegenTorqueLF
+	_m->TRegenTorqueLF = ((_d[4] & 0x03u) << 6u) | ((_d[5] & 0xfcu) >> 2u);
+	// Extracting PWRegenTorqueLF
+	_m->PWRegenTorqueLF = ((_d[5] & 0x03u) << 3u) | ((_d[6] & 0xe0u) >> 5u);
+	// Extracting TorqueVectoringModeF
+	_m->TorqueVectoringModeF = ((_d[6] & 0x18u) >> 3u);
+	// Extracting LaunchEnableF
+	_m->LaunchEnableF = ((_d[6] & 0x04u) >> 2u);
+	// Extracting SpeedSetPointF
+	_m->SpeedSetPointF = ((_d[6] & 0x03u) << 6u) | ((_d[7] & 0xfcu) >> 2u);
 
 	return STATUS_OK;
 }
 
 // Unpack signals from RTD_MODES_SAVE
 int8_t Unpack_RTD_MODES_SAVE(RTD_MODES_SAVE_t* _m, const uint8_t* _d, uint8_t len) {
-	if (len < 2u) return STATUS_ERROR;
+	if (len < 8u) return STATUS_ERROR;
 
-	// Extracting RTDModeS
-	_m->RTDModeS = ((_d[0] & 0xe0u) >> 5u);
-	// Extracting TorqueLimitS
-	_m->TorqueLimitS = ((_d[0] & 0x18u) >> 3u);
-	// Extracting PowerLimitS
-	_m->PowerLimitS = ((_d[0] & 0x06u) >> 1u);
-	// Extracting RegenLimitS
-	_m->RegenLimitS = ((_d[0] & 0x01u) << 1u) | ((_d[1] & 0x80u) >> 7u);
-	// Extracting RegenModeS
-	_m->RegenModeS = ((_d[1] & 0x60u) >> 5u);
-	// Extracting TorqueVectoringModeS
-	_m->TorqueVectoringModeS = ((_d[1] & 0x18u) >> 3u);
-	// Extracting SpeedSetPointS
-	_m->SpeedSetPointS = ((_d[1] & 0x04u) >> 2u);
-	// Extracting LaunchDisableS
-	_m->LaunchDisableS = ((_d[1] & 0x02u) >> 1u);
+	// Extracting RTDMode
+	_m->RTDMode = ((_d[0] & 0xe0u) >> 5u);
+	// Extracting TotalTorqueLimit
+	_m->TotalTorqueLimit = ((_d[0] & 0x1fu) << 3u) | ((_d[1] & 0xe0u) >> 5u);
+	// Extracting PWTorqueL
+	_m->PWTorqueL = ((_d[1] & 0x1fu) >> 0u);
+	// Extracting PowerLimit
+	_m->PowerLimit = ((_d[2] & 0xffu) << 12u) | ((_d[3] & 0xffu) << 4u) | ((_d[4] & 0xf0u) >> 4u);
+	// Extracting RegenMode
+	_m->RegenMode = ((_d[4] & 0x0cu) >> 2u);
+	// Extracting TRegenTorqueL
+	_m->TRegenTorqueL = ((_d[4] & 0x03u) << 6u) | ((_d[5] & 0xfcu) >> 2u);
+	// Extracting PWRegenTorqueL
+	_m->PWRegenTorqueL = ((_d[5] & 0x03u) << 3u) | ((_d[6] & 0xe0u) >> 5u);
+	// Extracting TorqueVectoringMode
+	_m->TorqueVectoringMode = ((_d[6] & 0x18u) >> 3u);
+	// Extracting LaunchEnable
+	_m->LaunchEnable = ((_d[6] & 0x04u) >> 2u);
+	// Extracting SpeedSetPoint
+	_m->SpeedSetPoint = ((_d[6] & 0x03u) << 6u) | ((_d[7] & 0xfcu) >> 2u);
 
 	return STATUS_OK;
 }
 
 // Unpack signals from RTD_MODES_UPDATE
 int8_t Unpack_RTD_MODES_UPDATE(RTD_MODES_UPDATE_t* _m, const uint8_t* _d, uint8_t len) {
-	if (len < 2u) return STATUS_ERROR;
+	if (len < 8u) return STATUS_ERROR;
 
 	// Extracting RTDModeU
 	_m->RTDModeU = ((_d[0] & 0xe0u) >> 5u);
-	// Extracting TorqueLimitU
-	_m->TorqueLimitU = ((_d[0] & 0x18u) >> 3u);
+	// Extracting TotalTorqueLimitU
+	_m->TotalTorqueLimitU = ((_d[0] & 0x1fu) << 3u) | ((_d[1] & 0xe0u) >> 5u);
+	// Extracting PWTorqueLU
+	_m->PWTorqueLU = ((_d[1] & 0x1fu) >> 0u);
 	// Extracting PowerLimitU
-	_m->PowerLimitU = ((_d[0] & 0x06u) >> 1u);
-	// Extracting RegenLimitU
-	_m->RegenLimitU = ((_d[0] & 0x01u) << 1u) | ((_d[1] & 0x80u) >> 7u);
+	_m->PowerLimitU = ((_d[2] & 0xffu) << 12u) | ((_d[3] & 0xffu) << 4u) | ((_d[4] & 0xf0u) >> 4u);
 	// Extracting RegenModeU
-	_m->RegenModeU = ((_d[1] & 0x60u) >> 5u);
+	_m->RegenModeU = ((_d[4] & 0x0cu) >> 2u);
+	// Extracting TRegenTorqueLU
+	_m->TRegenTorqueLU = ((_d[4] & 0x03u) << 6u) | ((_d[5] & 0xfcu) >> 2u);
+	// Extracting PWRegenTorqueLU
+	_m->PWRegenTorqueLU = ((_d[5] & 0x03u) << 3u) | ((_d[6] & 0xe0u) >> 5u);
 	// Extracting TorqueVectoringModeU
-	_m->TorqueVectoringModeU = ((_d[1] & 0x18u) >> 3u);
+	_m->TorqueVectoringModeU = ((_d[6] & 0x18u) >> 3u);
+	// Extracting LaunchEnableU
+	_m->LaunchEnableU = ((_d[6] & 0x04u) >> 2u);
 	// Extracting SpeedSetPointU
-	_m->SpeedSetPointU = ((_d[1] & 0x04u) >> 2u);
-	// Extracting LaunchDisableU
-	_m->LaunchDisableU = ((_d[1] & 0x02u) >> 1u);
+	_m->SpeedSetPointU = ((_d[6] & 0x03u) << 6u) | ((_d[7] & 0xfcu) >> 2u);
 
 	return STATUS_OK;
 }
@@ -784,6 +810,19 @@ int8_t Unpack_CANHUB_STRAIN_STEERING(CANHUB_STRAIN_STEERING_t* _m, const uint8_t
 	_m->SteeringStrain1 = ((_d[0] & 0xffu) << 4u) | ((_d[1] & 0xf0u) >> 4u);
 	// Extracting SteeringStrain2
 	_m->SteeringStrain2 = ((_d[2] & 0xffu) << 4u) | ((_d[3] & 0xf0u) >> 4u);
+
+	return STATUS_OK;
+}
+
+// Pack signals from DRIVER_SELECTED_KP
+int8_t Pack_DRIVER_SELECTED_KP(const DRIVER_SELECTED_KP_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 1u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 1u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint8_t)(_m->TorqueVectoringEnable)) << 7u) & 0x80u);
+	_d[0] |= (( ((uint8_t)(_m->RegenEnable)) << 6u) & 0x40u);
+	_d[0] |= (( ((uint8_t)(_m->ScaleKp)) << 1u) & 0x3eu);
 
 	return STATUS_OK;
 }
@@ -1515,57 +1554,78 @@ int8_t Pack_TIMESTAMP_READING(const TIMESTAMP_READING_t* _m, uint8_t* _d, uint8_
 
 // Pack signals from RTD_MODES_FLASH
 int8_t Pack_RTD_MODES_FLASH(const RTD_MODES_FLASH_t* _m, uint8_t* _d, uint8_t len) {
-	if (len < 2u) return STATUS_ERROR;
+	if (len < 8u) return STATUS_ERROR;
 
-	for (uint8_t i = 0u; i < 2u; _d[i++] = 0u);
+	for (uint8_t i = 0u; i < 8u; _d[i++] = 0u);
 
-	_d[0] |= (( ((uint8_t)(_m->RTDMode)) << 5u) & 0xe0u);
-	_d[0] |= (( ((uint8_t)(_m->TorqueLimit)) << 3u) & 0x18u);
-	_d[0] |= (( ((uint8_t)(_m->PowerLimit)) << 1u) & 0x06u);
-	_d[0] |= (( ((uint8_t)(_m->RegenLimit)) >> 1u) & 0x01u);
-	_d[1] |= (( ((uint8_t)(_m->RegenLimit)) << 7u) & 0x80u);
-	_d[1] |= (( ((uint8_t)(_m->RegenMode)) << 5u) & 0x60u);
-	_d[1] |= (( ((uint8_t)(_m->TorqueVectoringMode)) << 3u) & 0x18u);
-	_d[1] |= (( ((uint8_t)(_m->SpeedSetPoint)) << 2u) & 0x04u);
-	_d[1] |= (( ((uint8_t)(_m->LaunchDisable)) << 1u) & 0x02u);
+	_d[0] |= (( ((uint8_t)(_m->RTDModeF)) << 5u) & 0xe0u);
+	_d[0] |= (( ((uint8_t)(_m->TotalTorqueLimitF)) >> 3u) & 0x1fu);
+	_d[1] |= (( ((uint8_t)(_m->TotalTorqueLimitF)) << 5u) & 0xe0u);
+	_d[1] |= (( ((uint8_t)(_m->PWTorqueLF)) << 0u) & 0x1fu);
+	_d[2] |= (( ((uint32_t)(_m->PowerLimitF)) >> 12u) & 0xffu);
+	_d[3] |= (( ((uint32_t)(_m->PowerLimitF)) >> 4u) & 0xffu);
+	_d[4] |= (( ((uint32_t)(_m->PowerLimitF)) << 4u) & 0xf0u);
+	_d[4] |= (( ((uint8_t)(_m->RegenModeF)) << 2u) & 0x0cu);
+	_d[4] |= (( ((uint8_t)(_m->TRegenTorqueLF)) >> 6u) & 0x03u);
+	_d[5] |= (( ((uint8_t)(_m->TRegenTorqueLF)) << 2u) & 0xfcu);
+	_d[5] |= (( ((uint8_t)(_m->PWRegenTorqueLF)) >> 3u) & 0x03u);
+	_d[6] |= (( ((uint8_t)(_m->PWRegenTorqueLF)) << 5u) & 0xe0u);
+	_d[6] |= (( ((uint8_t)(_m->TorqueVectoringModeF)) << 3u) & 0x18u);
+	_d[6] |= (( ((uint8_t)(_m->LaunchEnableF)) << 2u) & 0x04u);
+	_d[6] |= (( ((uint8_t)(_m->SpeedSetPointF)) >> 6u) & 0x03u);
+	_d[7] |= (( ((uint8_t)(_m->SpeedSetPointF)) << 2u) & 0xfcu);
 
 	return STATUS_OK;
 }
 
 // Pack signals from RTD_MODES_SAVE
 int8_t Pack_RTD_MODES_SAVE(const RTD_MODES_SAVE_t* _m, uint8_t* _d, uint8_t len) {
-	if (len < 2u) return STATUS_ERROR;
+	if (len < 8u) return STATUS_ERROR;
 
-	for (uint8_t i = 0u; i < 2u; _d[i++] = 0u);
+	for (uint8_t i = 0u; i < 8u; _d[i++] = 0u);
 
-	_d[0] |= (( ((uint8_t)(_m->RTDModeS)) << 5u) & 0xe0u);
-	_d[0] |= (( ((uint8_t)(_m->TorqueLimitS)) << 3u) & 0x18u);
-	_d[0] |= (( ((uint8_t)(_m->PowerLimitS)) << 1u) & 0x06u);
-	_d[0] |= (( ((uint8_t)(_m->RegenLimitS)) >> 1u) & 0x01u);
-	_d[1] |= (( ((uint8_t)(_m->RegenLimitS)) << 7u) & 0x80u);
-	_d[1] |= (( ((uint8_t)(_m->RegenModeS)) << 5u) & 0x60u);
-	_d[1] |= (( ((uint8_t)(_m->TorqueVectoringModeS)) << 3u) & 0x18u);
-	_d[1] |= (( ((uint8_t)(_m->SpeedSetPointS)) << 2u) & 0x04u);
-	_d[1] |= (( ((uint8_t)(_m->LaunchDisableS)) << 1u) & 0x02u);
+	_d[0] |= (( ((uint8_t)(_m->RTDMode)) << 5u) & 0xe0u);
+	_d[0] |= (( ((uint8_t)(_m->TotalTorqueLimit)) >> 3u) & 0x1fu);
+	_d[1] |= (( ((uint8_t)(_m->TotalTorqueLimit)) << 5u) & 0xe0u);
+	_d[1] |= (( ((uint8_t)(_m->PWTorqueL)) << 0u) & 0x1fu);
+	_d[2] |= (( ((uint32_t)(_m->PowerLimit)) >> 12u) & 0xffu);
+	_d[3] |= (( ((uint32_t)(_m->PowerLimit)) >> 4u) & 0xffu);
+	_d[4] |= (( ((uint32_t)(_m->PowerLimit)) << 4u) & 0xf0u);
+	_d[4] |= (( ((uint8_t)(_m->RegenMode)) << 2u) & 0x0cu);
+	_d[4] |= (( ((uint8_t)(_m->TRegenTorqueL)) >> 6u) & 0x03u);
+	_d[5] |= (( ((uint8_t)(_m->TRegenTorqueL)) << 2u) & 0xfcu);
+	_d[5] |= (( ((uint8_t)(_m->PWRegenTorqueL)) >> 3u) & 0x03u);
+	_d[6] |= (( ((uint8_t)(_m->PWRegenTorqueL)) << 5u) & 0xe0u);
+	_d[6] |= (( ((uint8_t)(_m->TorqueVectoringMode)) << 3u) & 0x18u);
+	_d[6] |= (( ((uint8_t)(_m->LaunchEnable)) << 2u) & 0x04u);
+	_d[6] |= (( ((uint8_t)(_m->SpeedSetPoint)) >> 6u) & 0x03u);
+	_d[7] |= (( ((uint8_t)(_m->SpeedSetPoint)) << 2u) & 0xfcu);
 
 	return STATUS_OK;
 }
 
 // Pack signals from RTD_MODES_UPDATE
 int8_t Pack_RTD_MODES_UPDATE(const RTD_MODES_UPDATE_t* _m, uint8_t* _d, uint8_t len) {
-	if (len < 2u) return STATUS_ERROR;
+	if (len < 8u) return STATUS_ERROR;
 
-	for (uint8_t i = 0u; i < 2u; _d[i++] = 0u);
+	for (uint8_t i = 0u; i < 8u; _d[i++] = 0u);
 
 	_d[0] |= (( ((uint8_t)(_m->RTDModeU)) << 5u) & 0xe0u);
-	_d[0] |= (( ((uint8_t)(_m->TorqueLimitU)) << 3u) & 0x18u);
-	_d[0] |= (( ((uint8_t)(_m->PowerLimitU)) << 1u) & 0x06u);
-	_d[0] |= (( ((uint8_t)(_m->RegenLimitU)) >> 1u) & 0x01u);
-	_d[1] |= (( ((uint8_t)(_m->RegenLimitU)) << 7u) & 0x80u);
-	_d[1] |= (( ((uint8_t)(_m->RegenModeU)) << 5u) & 0x60u);
-	_d[1] |= (( ((uint8_t)(_m->TorqueVectoringModeU)) << 3u) & 0x18u);
-	_d[1] |= (( ((uint8_t)(_m->SpeedSetPointU)) << 2u) & 0x04u);
-	_d[1] |= (( ((uint8_t)(_m->LaunchDisableU)) << 1u) & 0x02u);
+	_d[0] |= (( ((uint8_t)(_m->TotalTorqueLimitU)) >> 3u) & 0x1fu);
+	_d[1] |= (( ((uint8_t)(_m->TotalTorqueLimitU)) << 5u) & 0xe0u);
+	_d[1] |= (( ((uint8_t)(_m->PWTorqueLU)) << 0u) & 0x1fu);
+	_d[2] |= (( ((uint32_t)(_m->PowerLimitU)) >> 12u) & 0xffu);
+	_d[3] |= (( ((uint32_t)(_m->PowerLimitU)) >> 4u) & 0xffu);
+	_d[4] |= (( ((uint32_t)(_m->PowerLimitU)) << 4u) & 0xf0u);
+	_d[4] |= (( ((uint8_t)(_m->RegenModeU)) << 2u) & 0x0cu);
+	_d[4] |= (( ((uint8_t)(_m->TRegenTorqueLU)) >> 6u) & 0x03u);
+	_d[5] |= (( ((uint8_t)(_m->TRegenTorqueLU)) << 2u) & 0xfcu);
+	_d[5] |= (( ((uint8_t)(_m->PWRegenTorqueLU)) >> 3u) & 0x03u);
+	_d[6] |= (( ((uint8_t)(_m->PWRegenTorqueLU)) << 5u) & 0xe0u);
+	_d[6] |= (( ((uint8_t)(_m->TorqueVectoringModeU)) << 3u) & 0x18u);
+	_d[6] |= (( ((uint8_t)(_m->LaunchEnableU)) << 2u) & 0x04u);
+	_d[6] |= (( ((uint8_t)(_m->SpeedSetPointU)) >> 6u) & 0x03u);
+	_d[7] |= (( ((uint8_t)(_m->SpeedSetPointU)) << 2u) & 0xfcu);
 
 	return STATUS_OK;
 }
