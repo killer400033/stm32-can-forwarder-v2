@@ -26,7 +26,7 @@ TIM_HandleTypeDef *ADCTimerInstance = NULL;
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
 extern ADC_HandleTypeDef hadc3;
-extern osMessageQueueId_t canSrcQueueHandle;
+extern osMessageQueueId_t canStreamQueueHandle;
 
 static void pushToWSandCAN(CanFrame *frame, uint8_t length);
 
@@ -138,8 +138,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 
 static void pushToWSandCAN(CanFrame *frame, uint8_t length)
 {
-  if (osMessageQueueGetSpace(canSrcQueueHandle) > 0) {
-    osMessageQueuePut(canSrcQueueHandle, frame, 0, 0);
+  if (osMessageQueueGetSpace(canStreamQueueHandle) > 0) {
+    osMessageQueuePut(canStreamQueueHandle, frame, 0, 0);
   }
   else {
     // TODO: Implement error handling for dropped messages

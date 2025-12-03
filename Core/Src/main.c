@@ -99,20 +99,15 @@ const osThreadAttr_t watchdogTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityHigh,
 };
-/* Definitions for wsCanQueue */
-osMessageQueueId_t wsCanQueueHandle;
-const osMessageQueueAttr_t wsCanQueue_attributes = {
-  .name = "wsCanQueue"
-};
 /* Definitions for storageCanQueue */
 osMessageQueueId_t storageCanQueueHandle;
 const osMessageQueueAttr_t storageCanQueue_attributes = {
   .name = "storageCanQueue"
 };
-/* Definitions for canSrcQueue */
-osMessageQueueId_t canSrcQueueHandle;
-const osMessageQueueAttr_t canSrcQueue_attributes = {
-  .name = "canSrcQueue"
+/* Definitions for canStreamQueue */
+osMessageQueueId_t canStreamQueueHandle;
+const osMessageQueueAttr_t canStreamQueue_attributes = {
+  .name = "canStreamQueue"
 };
 /* Definitions for dnsReqQueue */
 osMessageQueueId_t dnsReqQueueHandle;
@@ -240,14 +235,11 @@ int main(void)
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the queue(s) */
-  /* creation of wsCanQueue */
-  wsCanQueueHandle = osMessageQueueNew (128, sizeof(CanFrame), &wsCanQueue_attributes);
-
   /* creation of storageCanQueue */
   storageCanQueueHandle = osMessageQueueNew (128, sizeof(CanFrame), &storageCanQueue_attributes);
 
-  /* creation of canSrcQueue */
-  canSrcQueueHandle = osMessageQueueNew (128, sizeof(CanFrame), &canSrcQueue_attributes);
+  /* creation of canStreamQueue */
+  canStreamQueueHandle = osMessageQueueNew (256, sizeof(CanFrame), &canStreamQueue_attributes);
 
   /* creation of dnsReqQueue */
   dnsReqQueueHandle = osMessageQueueNew (4, sizeof(dns_request_t), &dnsReqQueue_attributes);
@@ -1344,31 +1336,7 @@ void StartDefaultTask(void *argument)
   // Initialize statistics monitoring
   initStats();
 
-  CanFrame canDataReceived = {0};
-  canDataReceived.can_bus = 2;
-  canDataReceived.can_id = 750;
-  canDataReceived.timestamp = getUnixTimeNanoseconds();
-
-
-  for(;;) {
-		// Process messages from canRecQueue and distribute to other queues
-		//osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever);
-		while (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
-			osMessageQueuePut(wsCanQueueHandle, &canDataReceived, 0, 0);
-		}
-		/*
-		else {
-			if (osMessageQueueGetSpace(storageCanQueueHandle) > 0) {
-				osMessageQueuePut(storageCanQueueHandle, &canDataReceived, 0, 0);
-			}
-			else {
-				dropped_packets++;
-			}
-
-		}
-		*/
-		osThreadYield();
-  }
+  osThreadExit();
   /* USER CODE END 5 */
 }
 
