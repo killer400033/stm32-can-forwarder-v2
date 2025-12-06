@@ -32,10 +32,10 @@ typedef struct CanFrameList {
 
 // WebSocket tx buffer union
 typedef union {
-    uint8_t full[WS_MAX_HEADER_LEN + 1024];  // Full buffer
+    uint8_t full[WS_MAX_HEADER_LEN + 2048];  // Full buffer
     struct {
         uint8_t header_space[WS_MAX_HEADER_LEN];  // Reserved for WebSocket header
-        uint8_t data[1024];                       // Payload data
+        uint8_t data[2048];                       // Payload data
     };
 } ws_send_buffer_t;
 

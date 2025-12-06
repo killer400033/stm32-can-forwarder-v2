@@ -856,10 +856,10 @@ void Wiznet_Timer_Callback(void)
         dmaTXCompleteCallback();
     }
 
+    command_t cmd;
     // For TCP sockets in ESTABLISHED state, check TX_FSR to send pending data
     for (uint8_t sn = 0; sn < _WIZCHIP_SOCK_NUM_; sn++) {
         // Check if socket is in ESTABLISHED state
-        command_t cmd;
         if (sockets[sn].registers.SR == SOCK_ESTABLISHED) {
             // Update TX_FSR, TX_RD and TX_WR
             generateGetRegCmd(&cmd, sn, Sn_TX_FSR(sn), (uint8_t*)sockets[sn].registers.TX_FSR, 6);
@@ -872,4 +872,14 @@ void Wiznet_Timer_Callback(void)
             taskEXIT_CRITICAL_FROM_ISR(isrm);
         }
     }
+
+    // Check Interrupts just incase its missed
+    generateGetRegCmd(&cmd, 0xFF, W5500_SIR, &common_regs.SIR, 1);
+    cmd.cmd_type = READ_SIR;
+
+    uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+    if (!queuePushBack(&command_queue, cmd)) {
+        enqueueFailsInISR++;
+    }
+    taskEXIT_CRITICAL_FROM_ISR(isrm);
 }

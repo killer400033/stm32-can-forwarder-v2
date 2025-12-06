@@ -1327,7 +1327,7 @@ void StartDefaultTask(void *argument)
   // Begin storage thread
   initStorage();
 
-
+  // Initialize Wiznet
   W5500Init(&hspi1, &htim13);
 
   // Initialize DNS Thread
@@ -1348,6 +1348,7 @@ void StartDefaultTask(void *argument)
   // Initialize statistics monitoring
   initStats();
 
+  // Exit starter thread
   osThreadExit();
   /* USER CODE END 5 */
 }

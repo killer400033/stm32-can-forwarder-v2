@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "socket.h"
 #include "cmsis_os.h"
+#include "log_handler.h"
 
 // Global WebSocket client state
 static ws_config_t g_ws_config = {0};
@@ -139,7 +140,7 @@ int8_t ws_client_connect(void) {
     uint32_t start_time = HAL_GetTick();
     uint16_t response_len = 0;
     
-    while ((HAL_GetTick() - start_time) < 5000) {  // 5 second timeout
+    while ((HAL_GetTick() - start_time) < 6000) {
         uint32_t received = recv(g_ws_config.socket_num, ws_rx_temp + response_len, 
                                 sizeof(ws_rx_temp) - response_len);
         if (received > 0) {
@@ -226,15 +227,14 @@ int8_t ws_client_process(uint8_t* buffer, uint16_t len, ws_opcode_t* opcode) {
     socket_status_t status = getSocketStatus(g_ws_config.socket_num);
     if (status != SOCKET_ESTABLISHED) {
         g_ws_state = WS_STATE_DISCONNECTED;
-        close(g_ws_config.socket_num);
         return WS_ERR_DISCONNECTED;
     }
     
     // Process event flags from callbacks
     if (g_timeout_flag) {
         g_timeout_flag = false;
-        g_ws_state = WS_STATE_DISCONNECTED;
         close(g_ws_config.socket_num);
+        g_ws_state = WS_STATE_DISCONNECTED;
         return WS_ERR_TIMEOUT;
     }
     
