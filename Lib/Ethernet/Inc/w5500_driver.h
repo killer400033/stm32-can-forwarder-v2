@@ -8,8 +8,9 @@
 extern "C" {
 #endif
 
-extern uint32_t enqueueFailsInISR;
-extern uint32_t commandRetries;
+extern volatile uint32_t enqueueFailsInISR;
+extern volatile uint32_t commandRetries;
+extern volatile uint32_t spiErrCount;
 
 /**
  * @brief WIZNET W5500 interrupt callback
@@ -29,6 +30,20 @@ void wiznetSPITxRxCompleteCallback(void);
  * @warning This is an ISR ONLY function. It processes the received data and manages the TX queue.
  */
 void wiznetSPITxCompleteCallback(void);
+
+/**
+ * @brief WIZNET W5500 SPI Error callback (DMA error, overrun, mode fault, CRC error, etc.)
+ * @note Call this function from HAL_SPI_ErrorCallback when the W5500 SPI has an error
+ * @warning This is an ISR ONLY function. It deselects CS and retries/skips the failed command.
+ */
+void wiznetSPIErrorCallback(void);
+
+/**
+ * @brief WIZNET W5500 SPI Abort complete callback
+ * @note Call this function from HAL_SPI_AbortCpltCallback when an abort completes
+ * @warning This is an ISR ONLY function. It deselects CS and continues processing.
+ */
+void wiznetSPIAbortCallback(void);
 
 /**
  * @brief Configure W5500 hardware (SPI and CS pin)

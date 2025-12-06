@@ -51,7 +51,7 @@ static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *can
 static bool canFramesEncode(pb_ostream_t *stream, const pb_field_iter_t *field, void * const *arg);
 static void dnsResolveCallback(const uint8_t* ip_addr, uint32_t ttl, bool success);
 
-extern osMessageQueueId_t wsCanQueueHandle;
+extern osMessageQueueId_t canStreamQueueHandle;
 extern osMessageQueueId_t dnsReqQueueHandle;
 
 // DNS state tracking
@@ -150,8 +150,8 @@ void appLayerThread(void *argument) {
 		// Send data if connected
 		if (ws_client_get_state() == WS_STATE_CONNECTED) {
 			// Collect CAN frames from queue
-			while (osMessageQueueGetCount(wsCanQueueHandle) > 0 && canFrameList.count < MAX_CAN_FRAME_CNT) {
-				osMessageQueueGet(wsCanQueueHandle, &(canFrameList.canFrames[canFrameList.count++]), 0, 0);
+			while (osMessageQueueGetCount(canStreamQueueHandle) > 0 && canFrameList.count < MAX_CAN_FRAME_CNT) {
+				osMessageQueueGet(canStreamQueueHandle, &(canFrameList.canFrames[canFrameList.count++]), 0, 0);
 			}
 
 			if (canFrameList.count > 0) {

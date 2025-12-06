@@ -1297,6 +1297,18 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	}
 }
 
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi) {
+	if (hspi->Instance == wiznet_hspi->Instance) {
+		wiznetSPIErrorCallback();
+	}
+}
+
+void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef *hspi) {
+	if (hspi->Instance == wiznet_hspi->Instance) {
+		wiznetSPIAbortCallback();
+	}
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */

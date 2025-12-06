@@ -8,7 +8,8 @@
 extern volatile uint32_t dropped_packets;
 extern volatile uint32_t can_send_errors;
 extern volatile uint32_t can_read_errors;
-extern uint32_t enqueueFailsInISR;
+extern volatile uint32_t enqueueFailsInISR;
+extern volatile uint32_t spiErrCount;
 
 // Thread handle and attributes
 osThreadId_t statsTaskHandle;
@@ -35,12 +36,12 @@ void initStats(void) {
 void statsThread(void *argument) {
     for (;;) {
         // Print statistics
-        log_msg(LL_DBG, "Stats - Dropped packets: %lu, CAN send errors: %lu, CAN read errors: %lu", 
-                dropped_packets, can_send_errors, can_read_errors);
+        log_msg(LL_DBG, "Dropped Packets: %lu, CAN Send Errs: %lu, CAN Read Errs: %lu, SPI Send Errs: %lu", 
+                dropped_packets, can_send_errors, can_read_errors, spiErrCount);
         
         // Print enqueue fails only if greater than 0
         if (enqueueFailsInISR > 0) {
-            log_msg(LL_ERR, "Stats - Enqueue fails in ISR: %lu", enqueueFailsInISR);
+            log_msg(LL_ERR, "Enqueue fails in ISR: %lu", enqueueFailsInISR);
         }
         
         // Wait 10 seconds before next update

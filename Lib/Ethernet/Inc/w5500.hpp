@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include "queue.hpp"
 
-#define COMMAND_QUEUE_SIZE 100
+#define COMMAND_QUEUE_SIZE 1000
 #define SOCKET_QUEUE_SIZE 15
 #define COMMAND_BUFFER_SIZE 10
 #define MAX_SOCK_NUM _WIZCHIP_SOCK_NUM_  // Maximum number of sockets
@@ -132,8 +132,8 @@ typedef struct socket_t {
 extern socket_t sockets[_WIZCHIP_SOCK_NUM_];
 
 // W5500 low-level functions
-bool enqueueSetReg(uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len);
-bool enqueueGetReg(uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
+bool enqueueSetReg(uint8_t sn, uint32_t addr, const uint8_t* data, uint16_t len);
+bool enqueueGetReg(uint8_t sn, uint32_t addr, uint8_t* buffer, uint16_t len);
 int pollRegNoIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false, uint16_t timeout=2000);
 int pollRegWithIT(uint8_t sn, uint32_t addr, uint8_t* reg, uint16_t val, bool inv=false);
 int16_t getTXBufferIndex(socket_t* socket, uint16_t len);

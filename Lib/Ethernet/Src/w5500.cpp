@@ -10,14 +10,16 @@
 static void kickStartCommands(void);
 static void dmaTXCompleteCallback(void);
 static void dmaRXCompleteCallback(void);
-static inline void generateSetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len);
-static inline void generateGetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
-static inline void generateSetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
-static inline void generateGetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len);
+static void handleSPIFailure(void);
+static inline void generateSetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, const uint8_t* data, uint16_t len);
+static inline void generateGetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint16_t len);
+static inline void generateSetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint16_t len);
+static inline void generateGetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint16_t len);
 
 // Variables used for logging and debugging
-uint32_t enqueueFailsInISR = 0;
-uint32_t commandRetries = 0;
+volatile uint32_t enqueueFailsInISR = 0;
+volatile uint32_t commandRetries = 0;
+volatile uint32_t spiErrCount = 0;
 
 static Queue<command_t, COMMAND_QUEUE_SIZE> command_queue;
 command_t running_cmd = IDLE_COMMAND; // Starts off IDLE
@@ -176,7 +178,7 @@ int initWizchip(uint8_t* ip_address, uint8_t* subnet_mask, uint8_t* gateway_ip,
 }
 
 // **DO NOT CALL FROM INTERRUPT CONTEXT!**
-bool enqueueSetReg(uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len) {
+bool enqueueSetReg(uint8_t sn, uint32_t addr, const uint8_t* data, uint16_t len) {
     if (len > COMMAND_BUFFER_SIZE - 3) {
         return false;
     }
@@ -192,7 +194,7 @@ bool enqueueSetReg(uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len) 
 }
 
 // **DO NOT CALL FROM INTERRUPT CONTEXT!**
-bool enqueueGetReg(uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len) {
+bool enqueueGetReg(uint8_t sn, uint32_t addr, uint8_t* buffer, uint16_t len) {
     if (len > COMMAND_BUFFER_SIZE - 3) {
         return false;
     }
@@ -292,6 +294,39 @@ void wiznetSPITxCompleteCallback(void)
     HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_SET);
 
     dmaTXCompleteCallback();
+}
+
+/**
+ * SPI Error callback (DMA error, overrun, mode fault, CRC error, etc.)
+ * Called when any SPI/DMA error occurs instead of the complete callback
+ * This prevents the system from hanging when DMA transfers fail
+ */
+void wiznetSPIErrorCallback(void)
+{    
+    handleSPIFailure();
+}
+
+/**
+ * SPI Abort complete callback
+ * Called after an SPI abort operation completes
+ */
+void wiznetSPIAbortCallback(void)
+{    
+    handleSPIFailure();
+}
+
+// Helper to handle SPI failure: deselect CS, re-enqueue command, set running_cmd to IDLE
+static inline void handleSPIFailure(void) {
+    HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_SET);
+    
+    uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
+    if (!queuePushFront(&command_queue, running_cmd)) {
+        enqueueFailsInISR++;
+    }
+    taskEXIT_CRITICAL_FROM_ISR(isrm);
+
+    running_cmd.cmd_type = IDLE;
+    spiErrCount++;
 }
 
 /**
@@ -401,6 +436,8 @@ static void dmaTXCompleteCallback(void) {
     // CS select (set low)
     HAL_GPIO_WritePin(wiznet_cs_port, wiznet_cs_pin, GPIO_PIN_RESET);
 
+    HAL_StatusTypeDef status;
+
     switch (running_cmd.cmd_type) {
         case WRITE_REG:
             // Check if this is a Sn_CR (Command Register) write
@@ -412,7 +449,11 @@ static void dmaTXCompleteCallback(void) {
                 if (sockets[running_cmd.sn].registers.CR != 0x00) {
                     commandRetries++;
                     // CR register is busy, send read command to get latest CR value instead
-                    HAL_SPI_TransmitReceive_DMA(wiznet_hspi, read_cmd.inline_buf, read_cmd.inline_buf, read_cmd.len);
+                    status = HAL_SPI_TransmitReceive_DMA(wiznet_hspi, read_cmd.inline_buf, read_cmd.inline_buf, read_cmd.len);
+                    if (status != HAL_OK) {
+                        handleSPIFailure();
+                        return;
+                    }
                     
                     // Re-enqueue the original write command to front
                     uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
@@ -423,7 +464,11 @@ static void dmaTXCompleteCallback(void) {
                 }
                 else {
                     // CR register is free, send write command
-                    HAL_SPI_Transmit_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.len);
+                    status = HAL_SPI_Transmit_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.len);
+                    if (status != HAL_OK) {
+                        handleSPIFailure();
+                        return;
+                    }
 
                     // Enqueue read command to front to update CR as soon as possible
                     uint32_t isrm = taskENTER_CRITICAL_FROM_ISR();
@@ -435,29 +480,61 @@ static void dmaTXCompleteCallback(void) {
             }
             else {
                 // Normal write command, just send it
-                HAL_SPI_Transmit_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.len);
+                status = HAL_SPI_Transmit_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.len);
+                if (status != HAL_OK) {
+                    handleSPIFailure();
+                    return;
+                }
             }
             break;
         case WRITE_BUF:
-            HAL_SPI_Transmit_DMA(wiznet_hspi, running_cmd.ptr, running_cmd.len);
+            status = HAL_SPI_Transmit_DMA(wiznet_hspi, running_cmd.ptr, running_cmd.len);
+            if (status != HAL_OK) {
+                handleSPIFailure();
+                return;
+            }
             break;
         case READ_REG:
-            HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            status = HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            if (status != HAL_OK) {
+                handleSPIFailure();
+                return;
+            }
             break;
         case READ_BUF:
-            HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.ptr, running_cmd.ptr, running_cmd.len);
+            status = HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.ptr, running_cmd.ptr, running_cmd.len);
+            if (status != HAL_OK) {
+                handleSPIFailure();
+                return;
+            }
             break;
         case READ_SIR:
-            HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            status = HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            if (status != HAL_OK) {
+                handleSPIFailure();
+                return;
+            }
             break;
         case READ_SOC:
-        		HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.ptr, running_cmd.ptr, running_cmd.len);
-        		break;
+            status = HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.ptr, running_cmd.ptr, running_cmd.len);
+            if (status != HAL_OK) {
+                handleSPIFailure();
+                return;
+            }
+            break;
         case CHECK_RCV:
-            HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            status = HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            if (status != HAL_OK) {
+                handleSPIFailure();
+                return;
+            }
             break;
         case CHECK_TX_FSR:
-            HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            status = HAL_SPI_TransmitReceive_DMA(wiznet_hspi, running_cmd.inline_buf, running_cmd.inline_buf, running_cmd.len);
+            if (status != HAL_OK) {
+                handleSPIFailure();
+                return;
+            }
             break;
         default:
             // CS deselect (set high) - for unknown command types
@@ -718,7 +795,7 @@ void receivePendingData(uint8_t sn) {
     }
 }
 
-static inline void generateSetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, const uint8_t* data, uint8_t len) {
+static inline void generateSetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, const uint8_t* data, uint16_t len) {
     addr |= (_W5500_SPI_WRITE_ | _W5500_SPI_VDM_OP_);
 
     cmd->cmd_type = WRITE_REG;
@@ -730,7 +807,7 @@ static inline void generateSetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, 
     cmd->len = 3 + len;
 }
 
-static inline void generateGetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len) {
+static inline void generateGetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint16_t len) {
     addr |= (_W5500_SPI_READ_ | _W5500_SPI_VDM_OP_);
 
     cmd->cmd_type = READ_REG;
@@ -742,7 +819,7 @@ static inline void generateGetRegCmd(command_t* cmd, uint8_t sn, uint32_t addr, 
     cmd->len = 3 + len;
 }
 
-static inline void generateSetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len) {
+static inline void generateSetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint16_t len) {
     addr |= (_W5500_SPI_WRITE_ | _W5500_SPI_VDM_OP_);
 
     cmd->cmd_type = WRITE_BUF;
@@ -754,7 +831,7 @@ static inline void generateSetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, 
     cmd->len = len;
 }
 
-static inline void generateGetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint8_t len) {
+static inline void generateGetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, uint8_t* buffer, uint16_t len) {
     addr |= (_W5500_SPI_READ_ | _W5500_SPI_VDM_OP_);
 
     cmd->cmd_type = READ_BUF;
@@ -773,6 +850,12 @@ static inline void generateGetBufCmd(command_t* cmd, uint8_t sn, uint32_t addr, 
  */
 void Wiznet_Timer_Callback(void)
 {
+    // If no command is running and queue isn't empty, process the next command in the queue
+    // This will only occur in cases where SPI send errors out
+    if (running_cmd.cmd_type == IDLE && !queueIsEmpty(&command_queue)) {
+        dmaTXCompleteCallback();
+    }
+
     // For TCP sockets in ESTABLISHED state, check TX_FSR to send pending data
     for (uint8_t sn = 0; sn < _WIZCHIP_SOCK_NUM_; sn++) {
         // Check if socket is in ESTABLISHED state
