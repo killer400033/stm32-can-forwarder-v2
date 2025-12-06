@@ -10,7 +10,7 @@ extern "C" {
 
 // UDP streaming port
 #define STREAM_UDP_PORT 9010
-#define STREAM_DOMAIN_NAME "ws-alb-1889248813.ap-southeast-2.elb.amazonaws.com"
+#define STREAM_DOMAIN_NAME "can-decoder-nlb-d6e50c7aacb346c5.elb.ap-southeast-2.amazonaws.com"
 
 void initStream(void);
 

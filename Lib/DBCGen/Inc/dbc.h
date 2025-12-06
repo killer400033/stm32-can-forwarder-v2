@@ -8,6 +8,13 @@
 #define STATUS_OK 0
 #define STATUS_ERROR -1
 
+// Struct for DRIVER_SELECTED_KP
+typedef struct {
+	uint8_t TorqueVectoringEnable;
+	uint8_t RegenEnable;
+	uint8_t ScaleKp;
+} DRIVER_SELECTED_KP_t;
+
 // Struct for FRONT_IMU_VELOCITY_NORMAL
 typedef struct {
 	double NormalVelocityX;
@@ -332,38 +339,44 @@ typedef struct {
 
 // Struct for RTD_MODES_FLASH
 typedef struct {
-	uint8_t RTDMode;
-	uint8_t TorqueLimit;
-	uint8_t PowerLimit;
-	uint8_t RegenLimit;
-	uint8_t RegenMode;
-	uint8_t TorqueVectoringMode;
-	uint8_t SpeedSetPoint;
-	uint8_t LaunchDisable;
+	uint8_t RTDModeF;
+	uint8_t TotalTorqueLimitF;
+	uint8_t PWTorqueLF;
+	uint32_t PowerLimitF;
+	int8_t RegenModeF;
+	uint8_t TRegenTorqueLF;
+	uint8_t PWRegenTorqueLF;
+	uint8_t TorqueVectoringModeF;
+	uint8_t LaunchEnableF;
+	uint8_t SpeedSetPointF;
 } RTD_MODES_FLASH_t;
 
 // Struct for RTD_MODES_SAVE
 typedef struct {
-	uint8_t RTDModeS;
-	uint8_t TorqueLimitS;
-	uint8_t PowerLimitS;
-	uint8_t RegenLimitS;
-	uint8_t RegenModeS;
-	uint8_t TorqueVectoringModeS;
-	uint8_t SpeedSetPointS;
-	uint8_t LaunchDisableS;
+	uint8_t RTDMode;
+	uint8_t TotalTorqueLimit;
+	uint8_t PWTorqueL;
+	uint32_t PowerLimit;
+	int8_t RegenMode;
+	uint8_t TRegenTorqueL;
+	uint8_t PWRegenTorqueL;
+	uint8_t TorqueVectoringMode;
+	uint8_t LaunchEnable;
+	uint8_t SpeedSetPoint;
 } RTD_MODES_SAVE_t;
 
 // Struct for RTD_MODES_UPDATE
 typedef struct {
 	uint8_t RTDModeU;
-	uint8_t TorqueLimitU;
-	uint8_t PowerLimitU;
-	uint8_t RegenLimitU;
-	uint8_t RegenModeU;
+	uint8_t TotalTorqueLimitU;
+	uint8_t PWTorqueLU;
+	uint32_t PowerLimitU;
+	int8_t RegenModeU;
+	uint8_t TRegenTorqueLU;
+	uint8_t PWRegenTorqueLU;
 	uint8_t TorqueVectoringModeU;
+	uint8_t LaunchEnableU;
 	uint8_t SpeedSetPointU;
-	uint8_t LaunchDisableU;
 } RTD_MODES_UPDATE_t;
 
 // Struct for CANHUB_TEMP_SENSORS
@@ -404,6 +417,7 @@ typedef struct {
 
 
 // Unpack function prototypes
+int8_t Unpack_DRIVER_SELECTED_KP(DRIVER_SELECTED_KP_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_FRONT_IMU_VELOCITY_NORMAL(FRONT_IMU_VELOCITY_NORMAL_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_PEDALS_AND_STEERING(PEDALS_AND_STEERING_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_FRONT_IMU_GYROS(FRONT_IMU_GYROS_t* _m, const uint8_t* _d, uint8_t len);
@@ -457,6 +471,7 @@ int8_t Unpack_CANHUB_STRAIN_LINKS(CANHUB_STRAIN_LINKS_t* _m, const uint8_t* _d, 
 int8_t Unpack_CANHUB_STRAIN_STEERING(CANHUB_STRAIN_STEERING_t* _m, const uint8_t* _d, uint8_t len);
 
 // Pack function prototypes
+int8_t Pack_DRIVER_SELECTED_KP(const DRIVER_SELECTED_KP_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_FRONT_IMU_VELOCITY_NORMAL(const FRONT_IMU_VELOCITY_NORMAL_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_PEDALS_AND_STEERING(const PEDALS_AND_STEERING_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_FRONT_IMU_GYROS(const FRONT_IMU_GYROS_t* _m, uint8_t* _d, uint8_t len);

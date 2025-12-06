@@ -20,7 +20,7 @@ const osThreadAttr_t streamTask_attributes = {
 };
 
 // Maximum number of CAN frames to send in one UDP packet
-#define MAX_CAN_FRAME_CNT 50
+#define MAX_CAN_FRAME_CNT 9
 
 typedef struct CanFrameList {
     CanFrame canFrames[MAX_CAN_FRAME_CNT];
@@ -44,7 +44,7 @@ static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *can
 static bool canFramesEncode(pb_ostream_t *stream, const pb_field_iter_t *field, void * const *arg);
 static void dnsResolveCallback(const uint8_t* ip_addr, uint32_t ttl, bool success);
 
-extern osMessageQueueId_t wsCanQueueHandle;
+extern osMessageQueueId_t canStreamQueueHandle;
 extern osMessageQueueId_t dnsReqQueueHandle;
 
 void initStream(void) {
@@ -105,8 +105,8 @@ void streamThread(void *argument) {
 		}
 
 		// Collect CAN frames from queue
-		while (osMessageQueueGetCount(wsCanQueueHandle) > 0 && canFrameList.count < MAX_CAN_FRAME_CNT) {
-			osMessageQueueGet(wsCanQueueHandle, &(canFrameList.canFrames[canFrameList.count++]), 0, 0);
+		while (osMessageQueueGetCount(canStreamQueueHandle) > 0 && canFrameList.count < MAX_CAN_FRAME_CNT) {
+			osMessageQueueGet(canStreamQueueHandle, &(canFrameList.canFrames[canFrameList.count++]), 0, 0);
 		}
 
 		if (canFrameList.count > 0) {
