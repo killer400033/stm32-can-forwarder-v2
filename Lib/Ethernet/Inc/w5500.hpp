@@ -11,7 +11,7 @@
 #define MAX_SOCK_NUM _WIZCHIP_SOCK_NUM_  // Maximum number of sockets
 
 #define MAC_ADDRESS { 0x00, 0x08, 0xDC, 0xAB, 0xCD, 0xEF }
-#define INT_LEVEL 36
+#define INT_LEVEL 0x0000
 #define RETRY_TIME 1000 // Retry time in milliseconds
 #define RETRY_COUNT 5 // Retry count
 #define KEEP_ALIVE_TIMER 15 // Keep-alive timer in seconds (set to 0 to disable)

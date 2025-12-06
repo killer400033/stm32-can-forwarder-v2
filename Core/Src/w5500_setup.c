@@ -45,7 +45,7 @@ void W5500Init(SPI_HandleTypeDef *hspi, TIM_HandleTypeDef *htim) {
 
     rx_buf_sizes[DHCP_SOCKET] = 1;
     rx_buf_sizes[DNS_SOCKET] = 1;
-    rx_buf_sizes[STREAM_SOCKET] = 8;
+    rx_buf_sizes[STREAM_SOCKET] = 1;
     rx_buf_sizes[NTP_SOCKET] = 1;
     
     tx_buf_sizes[DHCP_SOCKET] = 1;

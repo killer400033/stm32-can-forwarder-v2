@@ -1325,7 +1325,7 @@ void StartDefaultTask(void *argument)
   initTime(&htim2);
 
   // Begin streaming thread
-  initStream();
+  initAppLayer(&hrng);
 
   // Initialize and start FDCAN peripherals
   initCAN();

@@ -59,12 +59,11 @@ void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 				// TODO: Implement proper error handling for dropped messages
 				dropped_packets++;
 			}
+			fifoFillLevel--;
 		} else {
 			can_read_errors++;
-			fifoFillLevel = HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0);
 			break;
 		}
-		fifoFillLevel--;
 	}
 }
 
