@@ -25,7 +25,7 @@ volatile uint64_t unixMicroseconds[3];
  */
 void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 	FDCAN_RxHeaderTypeDef rxHeader;
-	uint8_t rxData[8];
+	uint8_t rxData[64];
 	CanFrame canFrame;
 	uint32_t fifoFillLevel;
 
@@ -59,12 +59,11 @@ void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 				// TODO: Implement proper error handling for dropped messages
 				dropped_packets++;
 			}
-
-			fifoFillLevel--;
 		} else {
 			can_read_errors++;
 			break;
 		}
+		fifoFillLevel--;
 	}
 }
 

@@ -675,7 +675,7 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Instance = FDCAN1;
   hfdcan1.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   hfdcan1.Init.Mode = FDCAN_MODE_NORMAL;
-  hfdcan1.Init.AutoRetransmission = ENABLE;
+  hfdcan1.Init.AutoRetransmission = DISABLE;
   hfdcan1.Init.TransmitPause = DISABLE;
   hfdcan1.Init.ProtocolException = DISABLE;
   hfdcan1.Init.NominalPrescaler = 5;
@@ -728,7 +728,7 @@ static void MX_FDCAN2_Init(void)
   hfdcan2.Instance = FDCAN2;
   hfdcan2.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   hfdcan2.Init.Mode = FDCAN_MODE_NORMAL;
-  hfdcan2.Init.AutoRetransmission = ENABLE;
+  hfdcan2.Init.AutoRetransmission = DISABLE;
   hfdcan2.Init.TransmitPause = DISABLE;
   hfdcan2.Init.ProtocolException = DISABLE;
   hfdcan2.Init.NominalPrescaler = 5;
@@ -781,7 +781,7 @@ static void MX_FDCAN3_Init(void)
   hfdcan3.Instance = FDCAN3;
   hfdcan3.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   hfdcan3.Init.Mode = FDCAN_MODE_NORMAL;
-  hfdcan3.Init.AutoRetransmission = ENABLE;
+  hfdcan3.Init.AutoRetransmission = DISABLE;
   hfdcan3.Init.TransmitPause = DISABLE;
   hfdcan3.Init.ProtocolException = DISABLE;
   hfdcan3.Init.NominalPrescaler = 5;
@@ -1352,21 +1352,10 @@ void StartDefaultTask(void *argument)
 
   for(;;) {
 		// Process messages from canRecQueue and distribute to other queues
-		//osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever);
-		while (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
+		while (osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever) == osOK && osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
 			osMessageQueuePut(wsCanQueueHandle, &canDataReceived, 0, 0);
+			//osMessageQueuePut(storageCanQueueHandle, &canDataReceived, 0, 0);
 		}
-		/*
-		else {
-			if (osMessageQueueGetSpace(storageCanQueueHandle) > 0) {
-				osMessageQueuePut(storageCanQueueHandle, &canDataReceived, 0, 0);
-			}
-			else {
-				dropped_packets++;
-			}
-
-		}
-		*/
 		osThreadYield();
   }
   /* USER CODE END 5 */

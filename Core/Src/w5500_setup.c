@@ -11,10 +11,10 @@ TIM_HandleTypeDef *wiznet_htim;
 
 // Default network configuration
 wiz_NetInfo net_info = {
-    //.ip = {10, 0, 0, 69},
-		//.gw = {10, 0, 0, 1},
-		.ip = {192, 168, 137, 100},
-		.gw = {192, 168, 137, 1},
+    .ip = {10, 0, 0, 69},
+		.gw = {10, 0, 0, 1},
+		//.ip = {192, 168, 137, 100},
+		//.gw = {192, 168, 137, 1},
     .sn = {255, 255, 255, 0},
 };
 
