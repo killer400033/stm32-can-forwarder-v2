@@ -69,7 +69,7 @@ void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 
 void initCAN() {
 	FDCAN_FilterTypeDef sFilterConfig;
-  /* Configure RX filter to accept all messages */
+  /* Configure RX filter to accept all standard ID messages */
   sFilterConfig.IdType = FDCAN_STANDARD_ID;
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterType = FDCAN_FILTER_RANGE;
@@ -77,7 +77,28 @@ void initCAN() {
   sFilterConfig.FilterID1 = 0x000;
   sFilterConfig.FilterID2 = 0x7FF;
 
-  // Configure filters for all three FDCAN instances
+  // Configure standard ID filters for all three FDCAN instances
+  if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
+  	Error_Handler();
+  }
+
+  if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK) {
+  	Error_Handler();
+  }
+
+  if (HAL_FDCAN_ConfigFilter(&hfdcan3, &sFilterConfig) != HAL_OK) {
+  	Error_Handler();
+  }
+
+  /* Configure RX filter to accept all extended ID messages */
+  sFilterConfig.IdType = FDCAN_EXTENDED_ID;
+  sFilterConfig.FilterIndex = 0;
+  sFilterConfig.FilterType = FDCAN_FILTER_RANGE;
+  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+  sFilterConfig.FilterID1 = 0x00000000;
+  sFilterConfig.FilterID2 = 0x1FFFFFFF;
+
+  // Configure extended ID filters for all three FDCAN instances
   if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
   	Error_Handler();
   }
