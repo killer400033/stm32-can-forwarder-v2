@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "w5500_driver.h"
 
 osThreadId_t appLayerTaskHandle;
 const osThreadAttr_t appLayerTask_attributes = {
@@ -113,13 +114,38 @@ void appLayerThread(void *argument) {
 		}
 
 		// Wait for valid IP before attempting connection
-		if (!has_valid_ip) {
+		if (!has_valid_ip || !ntp_sync_successful) {
 			osDelay(1000);
 			continue;
 		}
 
 		// Update WebSocket config with resolved IP (only needs to be done once)
-		if (has_valid_ip && ws_config.host[0] == 0) {
+		if (has_valid_ip && ws_config.host[0] == 0 && ntp_sync_successful) {
+
+	    // COOKED AHH SHII
+			// Re-initialize wiznet to use full tx buffer for websocket
+	    uint8_t rx_buf_sizes[8] = {0};
+	    uint8_t tx_buf_sizes[8] = {0};
+	    rx_buf_sizes[STREAM_SOCKET] = 1;
+			tx_buf_sizes[STREAM_SOCKET] = 16;
+
+			wiz_NetInfo net_info = {
+			    .ip = {10, 0, 0, 69},
+					.gw = {10, 0, 0, 1},
+					//.ip = {192, 168, 137, 100},
+					//.gw = {192, 168, 137, 1},
+			    .sn = {255, 255, 255, 0},
+			};
+
+	    int result = initWizchip(net_info.ip, net_info.sn, net_info.gw,
+	                        rx_buf_sizes, tx_buf_sizes);
+	    if (result != 0) {
+	        log_msg(LL_ERR, "Failed to initialize W5500 chip: %d", result);
+	        return;
+	    }
+
+	    log_msg(LL_DBG, "WIZNET Re-Init Successful!");
+
 			memcpy(ws_config.host, ws_server_ip, 4);
 			ws_client_init(&ws_config);
 		}
