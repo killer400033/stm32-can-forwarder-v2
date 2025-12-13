@@ -225,6 +225,12 @@ typedef struct {
 	double CoolantTempFanOUT;
 } COOLANT_TEMPS_t;
 
+// Struct for LIMITS
+typedef struct {
+	uint16_t Min_PowerLimit;
+	uint16_t Max_TorqueLimit;
+} LIMITS_t;
+
 // Struct for DRIVER_DISPLAY_SELECT
 typedef struct {
 	uint8_t CurrentSelect;
@@ -448,6 +454,7 @@ int8_t Unpack_REAR_DAMPERS_REAR_BRAKES(REAR_DAMPERS_REAR_BRAKES_t* _m, const uin
 int8_t Unpack_BRAKE_PRESSURES(BRAKE_PRESSURES_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_COOLANT_PRESSURES(COOLANT_PRESSURES_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_COOLANT_TEMPS(COOLANT_TEMPS_t* _m, const uint8_t* _d, uint8_t len);
+int8_t Unpack_LIMITS(LIMITS_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_DRIVER_DISPLAY_SELECT(DRIVER_DISPLAY_SELECT_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_ECU_TractiveState(ECU_TractiveState_t* _m, const uint8_t* _d, uint8_t len);
 int8_t Unpack_ECU_STATUS_AND_LAPS(ECU_STATUS_AND_LAPS_t* _m, const uint8_t* _d, uint8_t len);
@@ -502,6 +509,7 @@ int8_t Pack_REAR_DAMPERS_REAR_BRAKES(const REAR_DAMPERS_REAR_BRAKES_t* _m, uint8
 int8_t Pack_BRAKE_PRESSURES(const BRAKE_PRESSURES_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_COOLANT_PRESSURES(const COOLANT_PRESSURES_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_COOLANT_TEMPS(const COOLANT_TEMPS_t* _m, uint8_t* _d, uint8_t len);
+int8_t Pack_LIMITS(const LIMITS_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_DRIVER_DISPLAY_SELECT(const DRIVER_DISPLAY_SELECT_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_ECU_TractiveState(const ECU_TractiveState_t* _m, uint8_t* _d, uint8_t len);
 int8_t Pack_ECU_STATUS_AND_LAPS(const ECU_STATUS_AND_LAPS_t* _m, uint8_t* _d, uint8_t len);

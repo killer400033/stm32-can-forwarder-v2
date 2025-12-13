@@ -434,6 +434,18 @@ int8_t Unpack_COOLANT_TEMPS(COOLANT_TEMPS_t* _m, const uint8_t* _d, uint8_t len)
 	return STATUS_OK;
 }
 
+// Unpack signals from LIMITS
+int8_t Unpack_LIMITS(LIMITS_t* _m, const uint8_t* _d, uint8_t len) {
+	if (len < 4u) return STATUS_ERROR;
+
+	// Extracting Min_PowerLimit
+	_m->Min_PowerLimit = ((_d[0] & 0xffu) << 8u) | ((_d[1] & 0xffu) >> 0u);
+	// Extracting Max_TorqueLimit
+	_m->Max_TorqueLimit = ((_d[2] & 0xffu) << 8u) | ((_d[3] & 0xffu) >> 0u);
+
+	return STATUS_OK;
+}
+
 // Unpack signals from DRIVER_DISPLAY_SELECT
 int8_t Unpack_DRIVER_DISPLAY_SELECT(DRIVER_DISPLAY_SELECT_t* _m, const uint8_t* _d, uint8_t len) {
 	if (len < 1u) return STATUS_ERROR;
@@ -1320,6 +1332,20 @@ int8_t Pack_COOLANT_TEMPS(const COOLANT_TEMPS_t* _m, uint8_t* _d, uint8_t len) {
 	_d[3] |= (( ((uint16_t)PACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPFANIN(_m->CoolantTempFanIN)) << 0u) & 0xffu);
 	_d[4] |= (( ((uint16_t)PACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPFANOUT(_m->CoolantTempFanOUT)) >> 8u) & 0xffu);
 	_d[5] |= (( ((uint16_t)PACK_SCALE_OFFSET_COOLANT_TEMPS_COOLANTTEMPFANOUT(_m->CoolantTempFanOUT)) << 0u) & 0xffu);
+
+	return STATUS_OK;
+}
+
+// Pack signals from LIMITS
+int8_t Pack_LIMITS(const LIMITS_t* _m, uint8_t* _d, uint8_t len) {
+	if (len < 4u) return STATUS_ERROR;
+
+	for (uint8_t i = 0u; i < 4u; _d[i++] = 0u);
+
+	_d[0] |= (( ((uint16_t)(_m->Min_PowerLimit)) >> 8u) & 0xffu);
+	_d[1] |= (( ((uint16_t)(_m->Min_PowerLimit)) << 0u) & 0xffu);
+	_d[2] |= (( ((uint16_t)(_m->Max_TorqueLimit)) >> 8u) & 0xffu);
+	_d[3] |= (( ((uint16_t)(_m->Max_TorqueLimit)) << 0u) & 0xffu);
 
 	return STATUS_OK;
 }
