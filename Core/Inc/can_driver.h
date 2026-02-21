@@ -26,7 +26,7 @@ int8_t sendCanFrame(uint16_t canId, uint8_t canBus, uint8_t *canData, uint8_t fr
 static const uint32_t canBaudRates[3] = {
 	1000000,  // CAN1: 1 Mbps
 	1000000,  // CAN2: 1 Mbps
-	250000    // CAN3: 250 kbps
+	500000    // CAN3: 500 kbps
 };
 
 // Inline function for getting CAN bus ID
