@@ -31,6 +31,8 @@ extern DMA_HandleTypeDef hdma_adc3;
 
 extern DMA_HandleTypeDef hdma_spi1_tx;
 
+extern DMA_HandleTypeDef hdma_spi1_rx;
+
 extern DMA_HandleTypeDef hdma_uart4_tx;
 
 /* Private typedef -----------------------------------------------------------*/
@@ -547,6 +549,62 @@ void HAL_FDCAN_MspDeInit(FDCAN_HandleTypeDef* hfdcan)
 }
 
 /**
+  * @brief RNG MSP Initialization
+  * This function configures the hardware resources used in this example
+  * @param hrng: RNG handle pointer
+  * @retval None
+  */
+void HAL_RNG_MspInit(RNG_HandleTypeDef* hrng)
+{
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+  if(hrng->Instance==RNG)
+  {
+    /* USER CODE BEGIN RNG_MspInit 0 */
+
+    /* USER CODE END RNG_MspInit 0 */
+
+  /** Initializes the peripherals clock
+  */
+    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RNG;
+    PeriphClkInitStruct.RngClockSelection = RCC_RNGCLKSOURCE_HSI48;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    /* Peripheral clock enable */
+    __HAL_RCC_RNG_CLK_ENABLE();
+    /* USER CODE BEGIN RNG_MspInit 1 */
+
+    /* USER CODE END RNG_MspInit 1 */
+
+  }
+
+}
+
+/**
+  * @brief RNG MSP De-Initialization
+  * This function freeze the hardware resources used in this example
+  * @param hrng: RNG handle pointer
+  * @retval None
+  */
+void HAL_RNG_MspDeInit(RNG_HandleTypeDef* hrng)
+{
+  if(hrng->Instance==RNG)
+  {
+    /* USER CODE BEGIN RNG_MspDeInit 0 */
+
+    /* USER CODE END RNG_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __HAL_RCC_RNG_CLK_DISABLE();
+    /* USER CODE BEGIN RNG_MspDeInit 1 */
+
+    /* USER CODE END RNG_MspDeInit 1 */
+  }
+
+}
+
+/**
   * @brief RTC MSP Initialization
   * This function configures the hardware resources used in this example
   * @param hrtc: RTC handle pointer
@@ -564,7 +622,7 @@ void HAL_RTC_MspInit(RTC_HandleTypeDef* hrtc)
   /** Initializes the peripherals clock
   */
     PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
-    PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
+    PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
     if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
     {
       Error_Handler();
@@ -750,6 +808,24 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi)
 
     __HAL_LINKDMA(hspi,hdmatx,hdma_spi1_tx);
 
+    /* SPI1_RX Init */
+    hdma_spi1_rx.Instance = DMA1_Stream4;
+    hdma_spi1_rx.Init.Request = DMA_REQUEST_SPI1_RX;
+    hdma_spi1_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
+    hdma_spi1_rx.Init.PeriphInc = DMA_PINC_DISABLE;
+    hdma_spi1_rx.Init.MemInc = DMA_MINC_ENABLE;
+    hdma_spi1_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+    hdma_spi1_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
+    hdma_spi1_rx.Init.Mode = DMA_NORMAL;
+    hdma_spi1_rx.Init.Priority = DMA_PRIORITY_LOW;
+    hdma_spi1_rx.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
+    if (HAL_DMA_Init(&hdma_spi1_rx) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    __HAL_LINKDMA(hspi,hdmarx,hdma_spi1_rx);
+
     /* SPI1 interrupt Init */
     HAL_NVIC_SetPriority(SPI1_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(SPI1_IRQn);
@@ -788,6 +864,7 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef* hspi)
 
     /* SPI1 DMA DeInit */
     HAL_DMA_DeInit(hspi->hdmatx);
+    HAL_DMA_DeInit(hspi->hdmarx);
 
     /* SPI1 interrupt DeInit */
     HAL_NVIC_DisableIRQ(SPI1_IRQn);
@@ -845,7 +922,20 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* htim_base)
     /* USER CODE BEGIN TIM7_MspInit 1 */
 
     /* USER CODE END TIM7_MspInit 1 */
+  }
+  else if(htim_base->Instance==TIM13)
+  {
+    /* USER CODE BEGIN TIM13_MspInit 0 */
 
+    /* USER CODE END TIM13_MspInit 0 */
+    /* Peripheral clock enable */
+    __HAL_RCC_TIM13_CLK_ENABLE();
+    /* TIM13 interrupt Init */
+    HAL_NVIC_SetPriority(TIM8_UP_TIM13_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(TIM8_UP_TIM13_IRQn);
+    /* USER CODE BEGIN TIM13_MspInit 1 */
+
+    /* USER CODE END TIM13_MspInit 1 */
   }
 
 }
@@ -896,6 +986,20 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* htim_base)
     /* USER CODE BEGIN TIM7_MspDeInit 1 */
 
     /* USER CODE END TIM7_MspDeInit 1 */
+  }
+  else if(htim_base->Instance==TIM13)
+  {
+    /* USER CODE BEGIN TIM13_MspDeInit 0 */
+
+    /* USER CODE END TIM13_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __HAL_RCC_TIM13_CLK_DISABLE();
+
+    /* TIM13 interrupt DeInit */
+    HAL_NVIC_DisableIRQ(TIM8_UP_TIM13_IRQn);
+    /* USER CODE BEGIN TIM13_MspDeInit 1 */
+
+    /* USER CODE END TIM13_MspDeInit 1 */
   }
 
 }

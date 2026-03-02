@@ -12,14 +12,12 @@
 #ifndef _DNS_CLIENT_H_
 #define _DNS_CLIENT_H_
 
-#include <stdint.h>
-#include <stdbool.h>
-#include "socket.h"
-#include "wizchip_conf.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdint.h>
+#include <stdbool.h>
 
 // DNS Constants
 #define DNS_PORT                    53          ///< Standard DNS port
@@ -126,6 +124,10 @@ typedef struct {
     uint16_t timeout_ms;                    ///< Timeout in milliseconds
     uint8_t max_retries;                    ///< Maximum number of retries
     uint8_t socket_num;                     ///< Socket number to use for DNS queries
+    uint8_t* tx_buf;                        ///< TX buffer for socket (must be at least DNS_MAX_PACKET_SIZE + 3 bytes)
+    uint16_t tx_buf_len;                    ///< TX buffer length
+    uint8_t* rx_buf;                        ///< RX buffer for socket (must be at least DNS_MAX_PACKET_SIZE + 3 bytes)
+    uint16_t rx_buf_len;                    ///< RX buffer length
 } dns_config_t;
 
 /**
@@ -143,43 +145,6 @@ int8_t dns_init(dns_config_t* config);
  * @return DNS_OK on success, error code on failure
  */
 int8_t dns_resolve_a(const char* hostname, uint8_t* ip_addr, uint32_t* ttl);
-
-/**
- * @brief Resolve IPv4 address to domain name (reverse DNS lookup)
- * @param ip_addr IPv4 address to resolve (4 bytes)
- * @param hostname Buffer to store resolved domain name
- * @param hostname_len Size of hostname buffer
- * @return DNS_OK on success, error code on failure
- */
-int8_t dns_resolve_ptr(const uint8_t* ip_addr, char* hostname, uint16_t hostname_len);
-
-/**
- * @brief Resolve CNAME record
- * @param hostname Domain name to resolve (null-terminated string)
- * @param cname Buffer to store canonical name
- * @param cname_len Size of cname buffer
- * @return DNS_OK on success, error code on failure
- */
-int8_t dns_resolve_cname(const char* hostname, char* cname, uint16_t cname_len);
-
-/**
- * @brief Resolve MX record
- * @param hostname Domain name to resolve (null-terminated string)
- * @param mx_server Buffer to store mail server name
- * @param mx_server_len Size of mx_server buffer
- * @param priority Pointer to store MX priority value
- * @return DNS_OK on success, error code on failure
- */
-int8_t dns_resolve_mx(const char* hostname, char* mx_server, uint16_t mx_server_len, uint16_t* priority);
-
-/**
- * @brief Send custom DNS query
- * @param hostname Domain name to query
- * @param qtype Query type (DNS_TYPE_A, DNS_TYPE_CNAME, etc.)
- * @param response Pointer to store DNS response
- * @return DNS_OK on success, error code on failure
- */
-int8_t dns_query(const char* hostname, uint16_t qtype, dns_response_t* response);
 
 /**
  * @brief Set DNS server address
@@ -233,14 +198,6 @@ int8_t dns_close(void);
  * @return String description of error
  */
 const char* dns_get_error_string(int8_t error_code);
-
-// Internal helper functions (not for public use)
-int8_t _dns_build_query(const char* hostname, uint16_t qtype, uint8_t* buffer, uint16_t* length);
-int8_t _dns_parse_response(const uint8_t* buffer, uint16_t length, dns_response_t* response);
-int8_t _dns_encode_name(const char* hostname, uint8_t* buffer, uint16_t* length);
-int8_t _dns_decode_name(const uint8_t* buffer, uint16_t buffer_len, uint16_t* offset, char* name, uint16_t name_len);
-uint16_t _dns_generate_id(void);
-bool _dns_is_valid_hostname(const char* hostname);
 
 #ifdef __cplusplus
 }

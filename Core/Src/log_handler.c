@@ -81,6 +81,7 @@ void log_init(UART_HandleTypeDef* huart) {
     log_msg(LL_DBG, "Log handler initialized");
 }
 
+// **DO NOT USE FROM INTERRUPT CONTEXT!**
 // Main logging function
 void log_msg(log_level_t level, const char* format, ...) {
     // Thread-safe write to buffer
