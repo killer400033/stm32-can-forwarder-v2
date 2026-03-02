@@ -1,0 +1,4 @@
+[submodule "scripts/dbcgenpy"]
+	path = scripts/dbcgenpy
+	url = https://github.com/killer400033/dbcGenPy.git
+	branch = main
