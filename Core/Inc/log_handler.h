@@ -35,6 +35,7 @@ void log_init(UART_HandleTypeDef* huart);
 
 // Main logging function with printf-style formatting
 // Automatically sends via DMA over UART or queues if busy
+// **DO NOT USE FROM INTERRUPT CONTEXT!**
 void log_msg(log_level_t level, const char* format, ...);
 
 #ifdef __cplusplus

@@ -4,7 +4,7 @@
 #include "pb_common.h"
 #include "pb_encode.h"
 #include "websocket_client.h"
-#include "w5500_driver.h"
+#include "w5500_setup.h"
 #include "storage.h"
 #include "dns_client.h"
 #include "dns_resolve.h"
@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "w5500_driver.h"
 
 osThreadId_t appLayerTaskHandle;
 const osThreadAttr_t appLayerTask_attributes = {
@@ -22,17 +23,36 @@ const osThreadAttr_t appLayerTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 
-pb_byte_t buffer[512];
+// Maximum number of CAN frames to send in one websocket packet
+#define MAX_CAN_FRAME_CNT 9
+
+typedef struct CanFrameList {
+    CanFrame canFrames[MAX_CAN_FRAME_CNT];
+    uint8_t count;
+} CanFrameList_t;
+
+// WebSocket tx buffer union
+typedef union {
+    uint8_t full[WS_MAX_HEADER_LEN + 2048];  // Full buffer
+    struct {
+        uint8_t header_space[WS_MAX_HEADER_LEN];  // Reserved for WebSocket header
+        uint8_t data[2048];                       // Payload data
+    };
+} ws_send_buffer_t;
+
+static ws_send_buffer_t ws_send_buf;
 static CanFrameList_t canFrameList = {0};
 
-volatile uint32_t dropped_packets = 0;
+// WebSocket TX/RX buffers for socket API
+static uint8_t ws_tx_buf[4096+3];
+static uint8_t ws_rx_buf[1024+3];
 
 void appLayerThread(void *argument);
 static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *canFrames);
 static bool canFramesEncode(pb_ostream_t *stream, const pb_field_iter_t *field, void * const *arg);
 static void dnsResolveCallback(const uint8_t* ip_addr, uint32_t ttl, bool success);
 
-extern osMessageQueueId_t wsCanQueueHandle;
+extern osMessageQueueId_t canStreamQueueHandle;
 extern osMessageQueueId_t dnsReqQueueHandle;
 
 // DNS state tracking
@@ -41,8 +61,11 @@ static uint32_t dns_ttl_expiry = 0;  // Timestamp when TTL expires
 static bool dns_request_pending = false;
 static bool has_valid_ip = false;
 
-void initAppLayer() {
+RNG_HandleTypeDef *app_rng = NULL;
+
+void initAppLayer(RNG_HandleTypeDef *hrng) {
 	appLayerTaskHandle = osThreadNew(appLayerThread, NULL, &appLayerTask_attributes);
+	app_rng = hrng;
 }
 
 // DNS resolution callback
@@ -59,27 +82,24 @@ static void dnsResolveCallback(const uint8_t* ip_addr, uint32_t ttl, bool succes
 // Main thread that runs
 void appLayerThread(void *argument) {
 	uint32_t prev_time = osKernelGetTickCount();
-	uint32_t prev_cnt = 0;
 	uint32_t cnt = 0;
+	bool connected = false;
 
-	static websocket_client_t ws_client;
-	static bool connected = false;
-
-	ws_client_init(&ws_client, WS_SOCKET);
+	// Initialize WebSocket client with new API
+	ws_config_t ws_config = {
+		.socket_num = STREAM_SOCKET,
+		.host = {0, 0, 0, 0},  // Will be set after DNS resolution
+		.port = 80,
+		.path = WS_DOMAIN_PATH,
+		.tx_buf = ws_tx_buf,
+		.tx_buf_len = sizeof(ws_tx_buf),
+		.rx_buf = ws_rx_buf,
+		.rx_buf_len = sizeof(ws_rx_buf)
+	};
 
 	for (;;) {
-		if (ws_client.state == WS_STATE_CONNECTED && !connected) {
-			log_msg(LL_DBG, "WebSocket connected!");
-			connected = true;
-	    }
-		if (ws_client.state == WS_STATE_DISCONNECTED && connected) {
-			log_msg(LL_WRN, "WebSocket disconnected...");
-			connected = false;
-		}
-		ws_client_process(&ws_client);
-
 		// Check if DNS TTL has expired and no request is pending
-		if ((!has_valid_ip) && !dns_request_pending) {
+		if (!has_valid_ip && !dns_request_pending) {
 			// Check if queue has space
 			if (osMessageQueueGetSpace(dnsReqQueueHandle) > 0) {
 				dns_request_t dns_req = {
@@ -89,13 +109,7 @@ void appLayerThread(void *argument) {
 				
 				if (osMessageQueuePut(dnsReqQueueHandle, &dns_req, 0, 0) == osOK) {
 					dns_request_pending = true;
-				} else {
-					log_msg(LL_ERR, "DNS Request: Failed to queue request");
-					osDelay(1000);
 				}
-			} else {
-				log_msg(LL_ERR, "DNS Request: Queue full, cannot queue request");
-				osDelay(1000);
 			}
 		}
 
@@ -105,37 +119,87 @@ void appLayerThread(void *argument) {
 			continue;
 		}
 
-		// TODO: Remove FAT delay when networking fixed
-		if (ws_client.state == WS_STATE_DISCONNECTED) {
-			osDelay(20000);
-			if (ws_client_connect(&ws_client, ws_server_ip, 80, WS_DOMAIN_PATH) != 0) {
-				log_msg(LL_WRN, "WebSocket client connection failed...");
+		// Update WebSocket config with resolved IP (only needs to be done once)
+		if (has_valid_ip && ws_config.host[0] == 0 && ntp_sync_successful) {
+
+	    // COOKED AHH SHII
+			// Re-initialize wiznet to use full tx buffer for websocket
+	    uint8_t rx_buf_sizes[8] = {0};
+	    uint8_t tx_buf_sizes[8] = {0};
+	    rx_buf_sizes[STREAM_SOCKET] = 1;
+			tx_buf_sizes[STREAM_SOCKET] = 16;
+
+			wiz_NetInfo net_info = {
+			    .ip = {10, 0, 0, 69},
+					.gw = {10, 0, 0, 1},
+					//.ip = {192, 168, 137, 100},
+					//.gw = {192, 168, 137, 1},
+			    .sn = {255, 255, 255, 0},
+			};
+
+	    int result = initWizchip(net_info.ip, net_info.sn, net_info.gw,
+	                        rx_buf_sizes, tx_buf_sizes);
+	    if (result != 0) {
+	        log_msg(LL_ERR, "Failed to initialize W5500 chip: %d", result);
+	        return;
+	    }
+
+	    log_msg(LL_DBG, "WIZNET Re-Init Successful!");
+
+			memcpy(ws_config.host, ws_server_ip, 4);
+			ws_client_init(&ws_config);
+		}
+
+		// Attempt to connect if disconnected
+		if (ws_client_get_state() == WS_STATE_DISCONNECTED) {
+			int result = ws_client_connect();
+			if (result != WS_OK) {
+				log_msg(LL_WRN, "WebSocket connection failed: %d", result);
+				osDelay(5000);
 			}
 		}
 
-		if (ws_client.state == WS_STATE_CONNECTED) {
-			while (osMessageQueueGetCount(wsCanQueueHandle) > 0 && canFrameList.count < MAX_CAN_FRAME_CNT) {
-				osMessageQueueGet(wsCanQueueHandle, &(canFrameList.canFrames[canFrameList.count++]), 0, 0);
+		// Process WebSocket
+		ws_opcode_t opcode;
+		ws_client_process(NULL, 0, &opcode);
+
+		// Handle state transitions
+		if (ws_client_get_state() == WS_STATE_CONNECTED && !connected) {
+			log_msg(LL_DBG, "WebSocket Connected!");
+			connected = true;
+		}
+		if ((ws_client_get_state() == WS_STATE_DISCONNECTED) && connected) {
+			log_msg(LL_WRN, "WebSocket Disconnected...");
+			connected = false;
+		}
+
+		// Send data if connected
+		if (ws_client_get_state() == WS_STATE_CONNECTED) {
+			// Collect CAN frames from queue
+			while (osMessageQueueGetCount(canStreamQueueHandle) > 0 && canFrameList.count < MAX_CAN_FRAME_CNT) {
+				osMessageQueueGet(canStreamQueueHandle, &(canFrameList.canFrames[canFrameList.count++]), 0, 0);
 			}
 
-			size_t msg_length = packetEncode(buffer, sizeof(buffer), &canFrameList);
+			if (canFrameList.count > 0) {
+				// Encode packet into the data section of the buffer
+				size_t msg_length = packetEncode(ws_send_buf.data, sizeof(ws_send_buf.data), &canFrameList);
 
-			// Send data over WebSocket
-			if (ws_client.state == WS_STATE_CONNECTED && msg_length > 0) {
-				(void)ws_client_send_binary(&ws_client, buffer, (uint16_t)msg_length);
+				// Send data over WebSocket (function will write header in header_space)
+				if (msg_length > 0) {
+					if (ws_client_send_binary(ws_send_buf.data, (uint16_t)msg_length) > 0) {
+						cnt += canFrameList.count;
+						canFrameList.count = 0;
+					}
+				}
 			}
-			cnt += canFrameList.count;
-			canFrameList.count = 0;
 		}
 
 		// Throughput measuring
 		if (osKernelGetTickCount() - prev_time > 10000) {
-			uint32_t speed = (cnt - prev_cnt) * sizeof(CanFrame) / 10;
+			uint32_t speed = cnt * sizeof(CanFrame) / 10;
 			prev_time = osKernelGetTickCount();
-			prev_cnt = cnt;
+			cnt = 0;
 			log_msg(LL_DBG, "Websocket: %ld B/s", speed);
-			log_msg(LL_DBG, "Connect Stat: %d", ws_client.state);
-			log_msg(LL_DBG, "Dropped Packets: %ld", dropped_packets);
 		}
 
 		osThreadYield();
@@ -177,4 +241,10 @@ static bool canFramesEncode(pb_ostream_t *stream, const pb_field_iter_t *field, 
 		}
 	}
 	return true;
+}
+
+uint32_t ws_rand(void) {
+	uint32_t random_value;
+	HAL_RNG_GenerateRandomNumber(app_rng, &random_value);
+	return random_value;
 }

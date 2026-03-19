@@ -13,7 +13,7 @@
 extern FDCAN_HandleTypeDef hfdcan1;
 extern FDCAN_HandleTypeDef hfdcan2;
 extern FDCAN_HandleTypeDef hfdcan3;
-extern osMessageQueueId_t canSrcQueueHandle;
+extern osMessageQueueId_t canStreamQueueHandle;
 
 // Clock for 3 CAN peripherals
 volatile uint64_t unixMicroseconds[3];
@@ -25,7 +25,7 @@ volatile uint64_t unixMicroseconds[3];
  */
 void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 	FDCAN_RxHeaderTypeDef rxHeader;
-	uint8_t rxData[8];
+	uint8_t rxData[64];
 	CanFrame canFrame;
 	uint32_t fifoFillLevel;
 
@@ -55,14 +55,13 @@ void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 			memcpy(canFrame.can_data, rxData, dataLength);
 
 			// Try to put message in queue
-			if (osMessageQueuePut(canSrcQueueHandle, &canFrame, 0, 0) != osOK) {
+			if (osMessageQueuePut(canStreamQueueHandle, &canFrame, 0, 0) != osOK) {
 				// TODO: Implement proper error handling for dropped messages
 				dropped_packets++;
 			}
-
 			fifoFillLevel--;
 		} else {
-			log_msg(LL_ERR, "Failed to read message from CAN %d FIFO", canBusId);
+			can_read_errors++;
 			break;
 		}
 	}
@@ -70,7 +69,7 @@ void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 
 void initCAN() {
 	FDCAN_FilterTypeDef sFilterConfig;
-  /* Configure RX filter to accept all messages */
+  /* Configure RX filter to accept all standard ID messages */
   sFilterConfig.IdType = FDCAN_STANDARD_ID;
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterType = FDCAN_FILTER_RANGE;
@@ -78,7 +77,28 @@ void initCAN() {
   sFilterConfig.FilterID1 = 0x000;
   sFilterConfig.FilterID2 = 0x7FF;
 
-  // Configure filters for all three FDCAN instances
+  // Configure standard ID filters for all three FDCAN instances
+  if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
+  	Error_Handler();
+  }
+
+  if (HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig) != HAL_OK) {
+  	Error_Handler();
+  }
+
+  if (HAL_FDCAN_ConfigFilter(&hfdcan3, &sFilterConfig) != HAL_OK) {
+  	Error_Handler();
+  }
+
+  /* Configure RX filter to accept all extended ID messages */
+  sFilterConfig.IdType = FDCAN_EXTENDED_ID;
+  sFilterConfig.FilterIndex = 0;
+  sFilterConfig.FilterType = FDCAN_FILTER_RANGE;
+  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+  sFilterConfig.FilterID1 = 0x00000000;
+  sFilterConfig.FilterID2 = 0x1FFFFFFF;
+
+  // Configure extended ID filters for all three FDCAN instances
   if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK) {
   	Error_Handler();
   }

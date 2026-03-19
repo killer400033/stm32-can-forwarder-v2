@@ -26,14 +26,17 @@
 #include <stdio.h>
 #include <string.h>
 #include "app_layer.h"
+#include "stream.h"
 #include "unix_time.h"
 #include "can_driver.h"
 #include "forwarder_pb.pb.h"
 #include "storage.h"
 #include "dns_resolve.h"
-#include "w5500_driver.h"
+#include "w5500_setup.h"
 #include "adc_scanner.h"
 #include "log_handler.h"
+#include "w5500_driver.h"
+#include "stats.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -63,15 +66,21 @@ FDCAN_HandleTypeDef hfdcan1;
 FDCAN_HandleTypeDef hfdcan2;
 FDCAN_HandleTypeDef hfdcan3;
 
+IWDG_HandleTypeDef hiwdg1;
+
+RNG_HandleTypeDef hrng;
+
 RTC_HandleTypeDef hrtc;
 
 SD_HandleTypeDef hsd1;
 
 SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_tx;
+DMA_HandleTypeDef hdma_spi1_rx;
 
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim7;
+TIM_HandleTypeDef htim13;
 
 UART_HandleTypeDef huart4;
 DMA_HandleTypeDef hdma_uart4_tx;
@@ -83,20 +92,22 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for wsCanQueue */
-osMessageQueueId_t wsCanQueueHandle;
-const osMessageQueueAttr_t wsCanQueue_attributes = {
-  .name = "wsCanQueue"
+/* Definitions for watchdogTask */
+osThreadId_t watchdogTaskHandle;
+const osThreadAttr_t watchdogTask_attributes = {
+  .name = "watchdogTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityHigh,
 };
 /* Definitions for storageCanQueue */
 osMessageQueueId_t storageCanQueueHandle;
 const osMessageQueueAttr_t storageCanQueue_attributes = {
   .name = "storageCanQueue"
 };
-/* Definitions for canSrcQueue */
-osMessageQueueId_t canSrcQueueHandle;
-const osMessageQueueAttr_t canSrcQueue_attributes = {
-  .name = "canSrcQueue"
+/* Definitions for canStreamQueue */
+osMessageQueueId_t canStreamQueueHandle;
+const osMessageQueueAttr_t canStreamQueue_attributes = {
+  .name = "canStreamQueue"
 };
 /* Definitions for dnsReqQueue */
 osMessageQueueId_t dnsReqQueueHandle;
@@ -135,10 +146,16 @@ static void MX_ADC3_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM7_Init(void);
+static void MX_RNG_Init(void);
+static void MX_TIM13_Init(void);
+static void MX_IWDG1_Init(void);
 void StartDefaultTask(void *argument);
+void watchdogHandler(void *argument);
 
 /* USER CODE BEGIN PFP */
-
+volatile uint32_t dropped_packets = 0;
+volatile uint32_t can_send_errors = 0;
+volatile uint32_t can_read_errors = 0;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -195,6 +212,9 @@ int main(void)
   MX_ADC2_Init();
   MX_TIM2_Init();
   MX_TIM7_Init();
+  MX_RNG_Init();
+  MX_TIM13_Init();
+  MX_IWDG1_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -215,14 +235,11 @@ int main(void)
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the queue(s) */
-  /* creation of wsCanQueue */
-  wsCanQueueHandle = osMessageQueueNew (128, sizeof(CanFrame), &wsCanQueue_attributes);
-
   /* creation of storageCanQueue */
   storageCanQueueHandle = osMessageQueueNew (128, sizeof(CanFrame), &storageCanQueue_attributes);
 
-  /* creation of canSrcQueue */
-  canSrcQueueHandle = osMessageQueueNew (128, sizeof(CanFrame), &canSrcQueue_attributes);
+  /* creation of canStreamQueue */
+  canStreamQueueHandle = osMessageQueueNew (256, sizeof(CanFrame), &canStreamQueue_attributes);
 
   /* creation of dnsReqQueue */
   dnsReqQueueHandle = osMessageQueueNew (4, sizeof(dns_request_t), &dnsReqQueue_attributes);
@@ -240,6 +257,9 @@ int main(void)
   /* Create the thread(s) */
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+  /* creation of watchdogTask */
+  watchdogTaskHandle = osThreadNew(watchdogHandler, NULL, &watchdogTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -284,12 +304,20 @@ void SystemClock_Config(void)
 
   while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
 
+  /** Configure LSE Drive Capability
+  */
+  HAL_PWR_EnableBkUpAccess();
+  __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_HIGH);
+
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI48|RCC_OSCILLATORTYPE_LSI
+                              |RCC_OSCILLATORTYPE_HSE|RCC_OSCILLATORTYPE_LSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
+  RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = 8;
@@ -645,7 +673,7 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Instance = FDCAN1;
   hfdcan1.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   hfdcan1.Init.Mode = FDCAN_MODE_NORMAL;
-  hfdcan1.Init.AutoRetransmission = ENABLE;
+  hfdcan1.Init.AutoRetransmission = DISABLE;
   hfdcan1.Init.TransmitPause = DISABLE;
   hfdcan1.Init.ProtocolException = DISABLE;
   hfdcan1.Init.NominalPrescaler = 5;
@@ -698,7 +726,7 @@ static void MX_FDCAN2_Init(void)
   hfdcan2.Instance = FDCAN2;
   hfdcan2.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   hfdcan2.Init.Mode = FDCAN_MODE_NORMAL;
-  hfdcan2.Init.AutoRetransmission = ENABLE;
+  hfdcan2.Init.AutoRetransmission = DISABLE;
   hfdcan2.Init.TransmitPause = DISABLE;
   hfdcan2.Init.ProtocolException = DISABLE;
   hfdcan2.Init.NominalPrescaler = 5;
@@ -751,13 +779,13 @@ static void MX_FDCAN3_Init(void)
   hfdcan3.Instance = FDCAN3;
   hfdcan3.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   hfdcan3.Init.Mode = FDCAN_MODE_NORMAL;
-  hfdcan3.Init.AutoRetransmission = ENABLE;
+  hfdcan3.Init.AutoRetransmission = DISABLE;
   hfdcan3.Init.TransmitPause = DISABLE;
   hfdcan3.Init.ProtocolException = DISABLE;
   hfdcan3.Init.NominalPrescaler = 5;
   hfdcan3.Init.NominalSyncJumpWidth = 1;
-  hfdcan3.Init.NominalTimeSeg1 = 55;
-  hfdcan3.Init.NominalTimeSeg2 = 8;
+  hfdcan3.Init.NominalTimeSeg1 = 27;
+  hfdcan3.Init.NominalTimeSeg2 = 4;
   hfdcan3.Init.DataPrescaler = 1;
   hfdcan3.Init.DataSyncJumpWidth = 1;
   hfdcan3.Init.DataTimeSeg1 = 1;
@@ -783,6 +811,62 @@ static void MX_FDCAN3_Init(void)
   /* USER CODE BEGIN FDCAN3_Init 2 */
 
   /* USER CODE END FDCAN3_Init 2 */
+
+}
+
+/**
+  * @brief IWDG1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_IWDG1_Init(void)
+{
+
+  /* USER CODE BEGIN IWDG1_Init 0 */
+
+  /* USER CODE END IWDG1_Init 0 */
+
+  /* USER CODE BEGIN IWDG1_Init 1 */
+
+  /* USER CODE END IWDG1_Init 1 */
+  hiwdg1.Instance = IWDG1;
+  hiwdg1.Init.Prescaler = IWDG_PRESCALER_64;
+  hiwdg1.Init.Window = 4095;
+  hiwdg1.Init.Reload = 4095;
+  if (HAL_IWDG_Init(&hiwdg1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN IWDG1_Init 2 */
+
+  /* USER CODE END IWDG1_Init 2 */
+
+}
+
+/**
+  * @brief RNG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RNG_Init(void)
+{
+
+  /* USER CODE BEGIN RNG_Init 0 */
+
+  /* USER CODE END RNG_Init 0 */
+
+  /* USER CODE BEGIN RNG_Init 1 */
+
+  /* USER CODE END RNG_Init 1 */
+  hrng.Instance = RNG;
+  hrng.Init.ClockErrorDetection = RNG_CED_ENABLE;
+  if (HAL_RNG_Init(&hrng) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RNG_Init 2 */
+
+  /* USER CODE END RNG_Init 2 */
 
 }
 
@@ -905,7 +989,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -1017,6 +1101,37 @@ static void MX_TIM7_Init(void)
 }
 
 /**
+  * @brief TIM13 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM13_Init(void)
+{
+
+  /* USER CODE BEGIN TIM13_Init 0 */
+
+  /* USER CODE END TIM13_Init 0 */
+
+  /* USER CODE BEGIN TIM13_Init 1 */
+
+  /* USER CODE END TIM13_Init 1 */
+  htim13.Instance = TIM13;
+  htim13.Init.Prescaler = 0;
+  htim13.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim13.Init.Period = 65535;
+  htim13.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim13.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim13) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM13_Init 2 */
+
+  /* USER CODE END TIM13_Init 2 */
+
+}
+
+/**
   * @brief UART4 Initialization Function
   * @param None
   * @retval None
@@ -1102,6 +1217,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Stream3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream3_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+  /* DMA1_Stream4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream4_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
 
 }
 
@@ -1150,15 +1268,15 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(SPI1_CS_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PD6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  /*Configure GPIO pin : WIZNET_INT_Pin */
+  GPIO_InitStruct.Pin = WIZNET_INT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+  HAL_GPIO_Init(WIZNET_INT_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+  HAL_NVIC_SetPriority(WIZNET_INT_EXTI_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(WIZNET_INT_EXTI_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -1166,6 +1284,36 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
+	if (hspi->Instance == wiznet_hspi->Instance) {
+		wiznetSPITxRxCompleteCallback();
+	}
+}
+
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) {
+	if (hspi->Instance == wiznet_hspi->Instance) {
+		wiznetSPITxCompleteCallback();
+	}
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+	if (GPIO_Pin == WIZNET_INT_Pin) {
+		wiznetInterruptCallback();
+	}
+}
+
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi) {
+	if (hspi->Instance == wiznet_hspi->Instance) {
+		wiznetSPIErrorCallback();
+	}
+}
+
+void HAL_SPI_AbortCpltCallback(SPI_HandleTypeDef *hspi) {
+	if (hspi->Instance == wiznet_hspi->Instance) {
+		wiznetSPIAbortCallback();
+	}
+}
 
 /* USER CODE END 4 */
 
@@ -1185,8 +1333,8 @@ void StartDefaultTask(void *argument)
   // Begin storage thread
   initStorage();
 
-  // Initialize W5500
-  W5500Init();
+  // Initialize Wiznet
+  W5500Init(&hspi1, &htim13);
 
   // Initialize DNS Thread
   initDNSResolve();
@@ -1194,33 +1342,40 @@ void StartDefaultTask(void *argument)
   // Initialize UNIX time Thread
   initTime(&htim2);
 
+  // Begin streaming thread
+  initAppLayer(&hrng);
+
   // Initialize and start FDCAN peripherals
   initCAN();
 
   // Initialize ADC Scanner with TIM7
   ADC_Scanner_Init(&htim7);
 
-  // Begin application layer thread
-  initAppLayer();
+  // Initialize statistics monitoring
+  initStats();
 
-  CanFrame canDataReceived;
-
-  for(;;) {
-		// Process messages from canRecQueue and distribute to other queues
-		osMessageQueueGet(canSrcQueueHandle, &canDataReceived, 0, osWaitForever);
-		if (osMessageQueueGetSpace(wsCanQueueHandle) > 0) {
-			osMessageQueuePut(wsCanQueueHandle, &canDataReceived, 0, 0);
-		}
-		else {
-			if (osMessageQueueGetSpace(storageCanQueueHandle) > 0) {
-				osMessageQueuePut(storageCanQueueHandle, &canDataReceived, 0, 0);
-			}
-			else {
-				dropped_packets++;
-			}
-		}
-  }
+  // Exit starter thread
+  osThreadExit();
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_watchdogHandler */
+/**
+* @brief Function implementing the watchdogTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_watchdogHandler */
+void watchdogHandler(void *argument)
+{
+  /* USER CODE BEGIN watchdogHandler */
+  /* Infinite loop */
+  for(;;)
+  {
+  	HAL_IWDG_Refresh(&hiwdg1);
+    osDelay(5000);
+  }
+  /* USER CODE END watchdogHandler */
 }
 
  /* MPU Configuration */
@@ -1275,6 +1430,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
   else if (htim->Instance == UNIXTimerInstance->Instance) {
   	UNIX_Timer_Callback();
+  }
+  else if (htim->Instance == wiznet_htim->Instance) {
+  	Wiznet_Timer_Callback();
   }
 
   /* USER CODE END Callback 1 */

@@ -26,7 +26,7 @@ TIM_HandleTypeDef *ADCTimerInstance = NULL;
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
 extern ADC_HandleTypeDef hadc3;
-extern osMessageQueueId_t canSrcQueueHandle;
+extern osMessageQueueId_t canStreamQueueHandle;
 
 static void pushToWSandCAN(CanFrame *frame, uint8_t length);
 
@@ -38,6 +38,10 @@ void ADC_Scanner_Init(TIM_HandleTypeDef *htim)
   HAL_ADCEx_Calibration_Start(&hadc3, ADC_CALIB_OFFSET, ADC_SINGLE_ENDED);
 
   ADCTimerInstance = htim;
+
+	#define ADC_TIM_CLK 275000000  // Timer clock frequency in Hz
+	#define ADC_SAMPLE_RATE 10  // ADC sampling rate (Hz)
+
 
   htim->Instance->PSC = 55000-1;
   htim->Instance->ARR = (ADC_TIM_CLK / 55000) / ADC_SAMPLE_RATE - 1;
@@ -79,23 +83,15 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 
 	// Reusable CAN frame for all messages
 	CanFrame frame = {0};
-	frame.can_bus = CONTROL_BUS;
+	frame.can_bus = SENSOR_BUS;
 	frame.timestamp = getUnixTimeNanoseconds();
-	float sensor_voltage;
 
 	// Create CAN frame for coolant and oil temperature sensors (CAN ID 910)
 	CANHUB_TEMP_SENSORS_t tempMsg = {0};
-	sensor_voltage = ((float)adc1_dma_buffer[2] * 3.3f) / 4095.0f;
-	tempMsg.OilTempSensorLeft = -0.0258f * sensor_voltage + 2.8204f;
-
-	sensor_voltage = ((float)adc1_dma_buffer[3] * 3.3f) / 4095.0f;
-	tempMsg.OilTempSensorRight = -0.0258f * sensor_voltage + 2.8204f;
-
-	sensor_voltage = ((float)adc1_dma_buffer[4] * 3.3f) / 4095.0f;
-	tempMsg.CoolingTempSensorLeft = -0.0262f * sensor_voltage + 2.8474f;
-
-	sensor_voltage = ((float)adc2_dma_buffer[2] * 3.3f) / 4095.0f;
-	tempMsg.CoolingTempSensorRight = -0.0262f * sensor_voltage + 2.8474f;
+	tempMsg.OilTempSensorLeft = ((float)adc1_dma_buffer[2] * 3.3f) / 4095.0f;
+	tempMsg.OilTempSensorRight = ((float)adc1_dma_buffer[3] * 3.3f) / 4095.0f;
+	tempMsg.CoolingTempSensorLeft = ((float)adc1_dma_buffer[4] * 3.3f) / 4095.0f;
+	tempMsg.CoolingTempSensorRight = ((float)adc2_dma_buffer[2] * 3.3f) / 4095.0f;
 
 	if (Pack_CANHUB_TEMP_SENSORS(&tempMsg, frame.can_data, 8) == STATUS_OK) {
 		frame.can_id = 910;
@@ -142,15 +138,15 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 
 static void pushToWSandCAN(CanFrame *frame, uint8_t length)
 {
-  if (osMessageQueueGetSpace(canSrcQueueHandle) > 0) {
-    osMessageQueuePut(canSrcQueueHandle, frame, 0, 0);
+  if (osMessageQueueGetSpace(canStreamQueueHandle) > 0) {
+    osMessageQueuePut(canStreamQueueHandle, frame, 0, 0);
   }
   else {
     // TODO: Implement error handling for dropped messages
     dropped_packets++;
   }
   if (sendCanFrame(frame->can_id, frame->can_bus, frame->can_data, length) != 0) {
-   log_msg(LL_ERR, "Failed to send CAN ID %d through bus %d", frame->can_id, frame->can_bus);
+    can_send_errors++;
   }
 }
 

@@ -51,6 +51,7 @@ EWARM/settings/
 EWARM/STM32F746/
 
 Debug
+Release
 
 #vscode
 .vscode/

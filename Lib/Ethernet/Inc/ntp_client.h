@@ -12,14 +12,12 @@
 #ifndef _NTP_CLIENT_H_
 #define _NTP_CLIENT_H_
 
-#include <stdint.h>
-#include <stdbool.h>
-#include "socket.h"
-#include "wizchip_conf.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdint.h>
+#include <stdbool.h>
 
 // NTP Constants
 #define NTP_PORT                    123         ///< Standard NTP port
@@ -105,6 +103,10 @@ typedef struct {
     uint8_t max_retries;            ///< Maximum number of retries
     uint8_t socket_num;             ///< Socket number to use for NTP queries
     uint8_t version;                ///< NTP version (default: 4)
+    uint8_t* tx_buf;                ///< Transmit buffer for socket
+    uint16_t tx_buf_len;            ///< Transmit buffer length
+    uint8_t* rx_buf;                ///< Receive buffer for socket
+    uint16_t rx_buf_len;            ///< Receive buffer length
 } ntp_config_t;
 
 /**
@@ -209,15 +211,6 @@ uint32_t ntp_to_unix_timestamp(const ntp_time_t* ntp_time);
  * @param ntp_time Pointer to store NTP time
  */
 void ntp_from_unix_timestamp(uint32_t unix_timestamp, ntp_time_t* ntp_time);
-
-// Internal helper functions (not for public use)
-int8_t _ntp_build_request(ntp_packet_t* packet);
-int8_t _ntp_parse_response(const uint8_t* buffer, uint16_t length, ntp_response_t* response);
-int8_t _ntp_send_request(void);
-int8_t _ntp_receive_response(ntp_response_t* response);
-uint32_t _ntp_get_current_time(void);
-void _ntp_swap_endian_32(uint32_t* value);
-void _ntp_swap_endian_ntp_time(ntp_time_t* ntp_time);
 
 #ifdef __cplusplus
 }

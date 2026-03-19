@@ -8,11 +8,6 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
-/* Defines -------------------------------------------------------------------*/
-#define ADC_TIM_CLK 550000000  // Timer clock frequency in Hz
-#define ADC_SAMPLE_RATE 10  // ADC sampling rate (Hz)
-
-
 /* Exported functions prototypes ---------------------------------------------*/
 void ADC_Scanner_Init(TIM_HandleTypeDef *htim);
 void ADC_Scanner_TriggerConversions(void);

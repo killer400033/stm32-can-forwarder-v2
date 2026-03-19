@@ -46,7 +46,9 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
-
+extern volatile uint32_t dropped_packets;
+extern volatile uint32_t can_send_errors;
+extern volatile uint32_t can_read_errors;
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
@@ -69,6 +71,9 @@ void Error_Handler_Debug(const char* file, int line, const char* func);
 #define SDMMC_CARD_DETECT_GPIO_Port GPIOA
 #define SPI1_CS_Pin GPIO_PIN_5
 #define SPI1_CS_GPIO_Port GPIOD
+#define WIZNET_INT_Pin GPIO_PIN_6
+#define WIZNET_INT_GPIO_Port GPIOD
+#define WIZNET_INT_EXTI_IRQn EXTI9_5_IRQn
 
 /* USER CODE BEGIN Private defines */
 
