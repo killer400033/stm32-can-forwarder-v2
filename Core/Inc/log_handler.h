@@ -18,7 +18,7 @@ typedef enum {
 } log_level_t;
 
 // Configuration
-#define LOG_BUFFER_SIZE     (2048)   // Total buffer size in bytes
+#define LOG_BUFFER_SIZE     (4096)   // Total buffer size in bytes
 #define LOG_MAX_MSG_LENGTH  (256)    // Maximum length of a single log message
 #define MIN_MSG_IN_BUFFER   (LOG_BUFFER_SIZE / LOG_MAX_MSG_LENGTH)     // Minimum possible number of messages in buffer
 #define LOG_USE_COLORS      1        // Set to 1 to enable ANSI colors, 0 to disable

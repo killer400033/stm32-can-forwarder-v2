@@ -8,14 +8,14 @@
 extern "C" {
 #endif
 
-// UDP streaming port
-#define STREAM_UDP_PORT 9010
-#define STREAM_DOMAIN_NAME "can-decoder-nlb-d6e50c7aacb346c5.elb.ap-southeast-2.amazonaws.com"
+// DNS configuration
+#define WS_DOMAIN_NAME "ws-alb-1889248813.ap-southeast-2.elb.amazonaws.com"
+#define WS_DOMAIN_PATH "/api/decoder/connection"
+#define WS_DOMAIN_PORT 80
 
-void initStream(void);
+void initStream(RNG_HandleTypeDef *hrng);
 
 #ifdef __cplusplus
 }
 #endif
 #endif
-

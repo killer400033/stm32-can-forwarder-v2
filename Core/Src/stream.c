@@ -3,92 +3,114 @@
 #include "forwarder_pb.pb.h"
 #include "pb_common.h"
 #include "pb_encode.h"
-#include "udp_client.h"
+#include "pb_decode.h"
+#include "websocket_client.h"
 #include "w5500_setup.h"
-#include "log_handler.h"
+#include "storage.h"
+#include "dns_client.h"
 #include "dns_resolve.h"
+#include "log_handler.h"
+#include "unix_time.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "w5500_driver.h"
+#include "can_driver.h"
 
 osThreadId_t streamTaskHandle;
 const osThreadAttr_t streamTask_attributes = {
-  .name = "UDP Stream",
+  .name = "Stream",
   .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 
-// Maximum number of CAN frames to send in one UDP packet
-#define MAX_CAN_FRAME_CNT 9
+// Maximum number of CAN frames to send in one websocket packet
+#define MAX_CAN_FRAME_CNT 40
 
 typedef struct CanFrameList {
     CanFrame canFrames[MAX_CAN_FRAME_CNT];
     uint8_t count;
 } CanFrameList_t;
 
-// UDP buffer for encoded data
-static uint8_t udp_send_buf[2048];
-static CanFrameList_t canFrameList = {0};
+// WebSocket tx buffer union
+typedef union {
+    uint8_t full[WS_MAX_HEADER_LEN + 2048];  // Full buffer
+    struct {
+        uint8_t header_space[WS_MAX_HEADER_LEN];  // Reserved for WebSocket header
+        uint8_t data[2048];                       // Payload data
+    };
+} ws_send_buffer_t;
 
-// UDP TX/RX buffers for socket API
-static uint8_t udp_tx_buf[4096+3];
-static uint8_t udp_rx_buf[8192+3];
+static uint8_t ws_recv_buf[2048];
+static ws_send_buffer_t ws_send_buf;
+static CanFrameList_t canFrameListTx = {0};
+static CanFrame canFrameRx = {0};
 
-static uint32_t dns_ttl_expiry = 0;  // Timestamp when TTL expires
-static bool dns_request_pending = false;
-static bool has_ip = false;
+// WebSocket TX/RX buffers for socket API
+static uint8_t ws_tx_buf[4096+3];
+static uint8_t ws_rx_buf[2048+3];
 
-void streamThread(void *argument);
+void streamTask(void *argument);
 static size_t packetEncode(pb_byte_t *buffer, size_t length, CanFrameList_t *canFrames);
 static bool canFramesEncode(pb_ostream_t *stream, const pb_field_iter_t *field, void * const *arg);
+static bool canFrameDecode(const pb_byte_t *buffer, size_t length, CanFrame *frame);
 static void dnsResolveCallback(const uint8_t* ip_addr, uint32_t ttl, bool success);
 
 extern osMessageQueueId_t canStreamQueueHandle;
 extern osMessageQueueId_t dnsReqQueueHandle;
+extern osMessageQueueId_t networkLogQueueHandle;
 
-void initStream(void) {
-	streamTaskHandle = osThreadNew(streamThread, NULL, &streamTask_attributes);
+// DNS state tracking
+static uint8_t ws_server_ip[4] = {0};
+static uint32_t dns_ttl_expiry = 0;  // Timestamp when TTL expires
+static bool dns_request_pending = false;
+static bool has_valid_ip = false;
+
+RNG_HandleTypeDef *app_rng = NULL;
+
+void initStream(RNG_HandleTypeDef *hrng) {
+	streamTaskHandle = osThreadNew(streamTask, NULL, &streamTask_attributes);
+	app_rng = hrng;
+}
+
+// DNS resolution callback
+static void dnsResolveCallback(const uint8_t* ip_addr, uint32_t ttl, bool success) {
+	if (success && ip_addr != NULL) {
+		memcpy(ws_server_ip, ip_addr, 4);
+		has_valid_ip = true;
+		// Set expiry time: current time + TTL (in milliseconds)
+		dns_ttl_expiry = osKernelGetTickCount() + (ttl * 1000);
+	}
+	dns_request_pending = false;
 }
 
 // Main thread that runs
-void streamThread(void *argument) {
+void streamTask(void *argument) {
 	uint32_t prev_time = osKernelGetTickCount();
-	uint32_t cnt = 0;
-	bool initialized = false;
+	uint32_t tx_cnt = 0;
+	uint32_t rx_cnt = 0;
+	bool connected = false;
 
-	// Initialize UDP client configuration
-	udp_client_config_t udp_config = {
+	// Initialize WebSocket client with new API
+	ws_config_t ws_config = {
 		.socket_num = STREAM_SOCKET,
-		.source_port = 5000,  // Local source port
-		.dest_ip = {0, 0, 0, 0},
-		.dest_port = STREAM_UDP_PORT,
-		.tx_buf = udp_tx_buf,
-		.tx_buf_len = sizeof(udp_tx_buf),
-		.rx_buf = udp_rx_buf,
-		.rx_buf_len = sizeof(udp_rx_buf)
+		.host = {0, 0, 0, 0},  // Will be set after DNS resolution
+		.port = WS_DOMAIN_PORT,
+		.path = WS_DOMAIN_PATH,
+		.tx_buf = ws_tx_buf,
+		.tx_buf_len = sizeof(ws_tx_buf),
+		.rx_buf = ws_rx_buf,
+		.rx_buf_len = sizeof(ws_rx_buf)
 	};
 
-	// Initialize UDP client
-	int8_t result = udp_client_init(&udp_config);
-	if (result != UDP_OK) {
-		log_msg(LL_ERR, "UDP client init failed: %d", result);
-	} else {
-		log_msg(LL_DBG, "UDP streaming initialized");
-		initialized = true;
-	}
-
 	for (;;) {
-		if (!initialized) {
-            log_msg(LL_ERR, "UDP streaming not initialized, exiting thread");
-			osThreadExit();
-		}
-
-        if (!dns_request_pending && (!has_ip || osKernelGetTickCount() > dns_ttl_expiry)) {
+		// Check if DNS TTL has expired and no request is pending
+		if ((!has_valid_ip || dns_ttl_expiry <= osKernelGetTickCount()) && !dns_request_pending) {
 			// Check if queue has space
 			if (osMessageQueueGetSpace(dnsReqQueueHandle) > 0) {
 				dns_request_t dns_req = {
-					.domain_name = STREAM_DOMAIN_NAME,
+					.domain_name = WS_DOMAIN_NAME,
 					.callback = dnsResolveCallback
 				};
 				
@@ -98,37 +120,90 @@ void streamThread(void *argument) {
 			}
 		}
 
-        // Wait for valid IP before attempting connection
-		if (!has_ip) {
+		// Wait for valid IP before attempting connection
+		if (!has_valid_ip || !ntp_sync_successful) {
 			osDelay(1000);
 			continue;
 		}
 
-		// Collect CAN frames from queue
-		while (osMessageQueueGetCount(canStreamQueueHandle) > 0 && canFrameList.count < MAX_CAN_FRAME_CNT) {
-			osMessageQueueGet(canStreamQueueHandle, &(canFrameList.canFrames[canFrameList.count++]), 0, 0);
+		// Update WebSocket config with resolved IP
+		if (has_valid_ip && ws_client_get_state() == WS_STATE_DISCONNECTED && memcmp(ws_config.host, ws_server_ip, 4) != 0 && ntp_sync_successful) {
+			memcpy(ws_config.host, ws_server_ip, 4);
+			ws_client_init(&ws_config);
 		}
 
-		if (canFrameList.count > 0) {
-			// Encode packet into the buffer
-			size_t msg_length = packetEncode(udp_send_buf, sizeof(udp_send_buf), &canFrameList);
+		// Attempt to connect if disconnected
+		if (ws_client_get_state() == WS_STATE_DISCONNECTED) {
+			int result = ws_client_connect();
+			if (result != WS_OK) {
+				log_msg(LL_WRN, "WebSocket connection failed: %d", result);
+				osDelay(5000);
+			}
+		}
 
-			// Send data over UDP
-			if (msg_length > 0) {
-				result = udp_client_send(udp_send_buf, (uint16_t)msg_length);
-				if (result == UDP_OK) {
-					cnt += canFrameList.count;
-					canFrameList.count = 0;
+		// Process WebSocket and received data
+		ws_opcode_t opcode;
+		int16_t len = ws_client_process(ws_recv_buf, sizeof(ws_recv_buf), &opcode);
+		if (len > 0 && opcode == WS_OPCODE_BINARY) {
+			// Decode CanFrame and send to can peripheral
+			if (canFrameDecode(ws_recv_buf, len, &canFrameRx)) {
+				sendCanFrame(canFrameRx.can_id, canFrameRx.can_bus, canFrameRx.can_data.bytes, canFrameRx.can_data.size);
+				rx_cnt++;
+			}
+		}
+
+		// Handle state transitions
+		if (ws_client_get_state() == WS_STATE_CONNECTED && !connected) {
+			log_msg(LL_DBG, "WebSocket Connected!");
+			connected = true;
+		}
+		if ((ws_client_get_state() == WS_STATE_DISCONNECTED) && connected) {
+			log_msg(LL_WRN, "WebSocket Disconnected...");
+			connected = false;
+		}
+
+		// Send data if connected
+		if (ws_client_get_state() == WS_STATE_CONNECTED) {
+			// Collect CAN frames from queue
+			while (osMessageQueueGetCount(canStreamQueueHandle) > 0 && canFrameListTx.count < MAX_CAN_FRAME_CNT) {
+				osMessageQueueGet(canStreamQueueHandle, &(canFrameListTx.canFrames[canFrameListTx.count++]), 0, 0);
+			}
+
+			if (canFrameListTx.count > 0) {
+				// Encode packet into the data section of the buffer
+				size_t msg_length = packetEncode(ws_send_buf.data, sizeof(ws_send_buf.data), &canFrameListTx);
+
+				// Send data over WebSocket (function will write header in header_space)
+				if (msg_length > 0) {
+					if (ws_client_send_binary(ws_send_buf.data, (uint16_t)msg_length) > 0) {
+						tx_cnt += canFrameListTx.count * sizeof(CanFrame);
+						canFrameListTx.count = 0;
+					}
+				}
+			}
+
+			// Send Logs
+			log_queue_entry_t logEntry;
+			while (osMessageQueueGetCount(networkLogQueueHandle) > 0) {
+				if (osMessageQueueGet(networkLogQueueHandle, &logEntry, 0, 0) == osOK) {
+					uint16_t len = logEntry.length > sizeof(ws_send_buf.data) ? sizeof(ws_send_buf.data) : logEntry.length;
+					memcpy(ws_send_buf.data, logEntry.start_ptr, len);
+
+					if (ws_client_send_text(ws_send_buf.data, len) > 0) {
+						tx_cnt += len;
+					}
 				}
 			}
 		}
 
 		// Throughput measuring
 		if (osKernelGetTickCount() - prev_time > 10000) {
-			uint32_t speed = cnt * sizeof(CanFrame) / 10;
+			uint32_t speed = tx_cnt / 10;
 			prev_time = osKernelGetTickCount();
-			cnt = 0;
-			log_msg(LL_DBG, "UDP Stream: %ld B/s", speed);
+			tx_cnt = 0;
+			log_msg(LL_DBG, "Websocket TX: %ld B/s", speed);
+			log_msg(LL_DBG, "Websocket RX: %ld Frames", rx_cnt);
+			rx_cnt = 0;
 		}
 
 		osThreadYield();
@@ -172,13 +247,19 @@ static bool canFramesEncode(pb_ostream_t *stream, const pb_field_iter_t *field, 
 	return true;
 }
 
-// DNS resolution callback
-static void dnsResolveCallback(const uint8_t* ip_addr, uint32_t ttl, bool success) {
-	if (success && ip_addr != NULL) {
-		udp_client_set_dest_ip(ip_addr);
-		has_ip = true;
-		// Set expiry time: current time + TTL (in milliseconds)
-		dns_ttl_expiry = osKernelGetTickCount() + (ttl * 1000);
-	}
-	dns_request_pending = false;
+static bool canFrameDecode(const pb_byte_t *buffer, size_t length, CanFrame *frame) {
+    pb_istream_t stream = pb_istream_from_buffer(buffer, length);
+    *frame = (CanFrame)CanFrame_init_zero;
+
+    if (!pb_decode(&stream, CanFrame_fields, frame)) {
+        log_msg(LL_ERR, "CanFrame decode error: %s", PB_GET_ERROR(&stream));
+        return false;
+    }
+    return true;
+}
+
+uint32_t ws_rand(void) {
+	uint32_t random_value;
+	HAL_RNG_GenerateRandomNumber(app_rng, &random_value);
+	return random_value;
 }

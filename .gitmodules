@@ -2,3 +2,6 @@
 	path = scripts/dbcgenpy
 	url = git@bitbucket.org:redbackracing/dbcgenpy.git
 	branch = main
+[submodule "scripts/dbc-files"]
+	path = scripts/dbc-files
+	url = git@bitbucket.org:redbackracing/dbc-files.git

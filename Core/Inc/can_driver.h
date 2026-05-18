@@ -14,19 +14,29 @@ extern FDCAN_HandleTypeDef hfdcan3;
 extern "C" {
 #endif
 
+#define MAX2(a, b)        ((a) > (b) ? (a) : (b))
+#define MAX3(a, b, c)     MAX2(MAX2(a, b), c)
+
 #define CONTROL_BUS 1
 #define SENSOR_BUS 2
 #define TRACTIVE_BUS 3
+
+#define CAN_BUS_CNT MAX3(CONTROL_BUS, SENSOR_BUS, TRACTIVE_BUS) + 1
 
 void initCAN();
 void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan);
 int8_t sendCanFrame(uint16_t canId, uint8_t canBus, uint8_t *canData, uint8_t frameLen);
 
+extern volatile uint32_t can_rx_packet_cnt[CAN_BUS_CNT];
+extern volatile uint32_t can_rx_byte_cnt[CAN_BUS_CNT];
+extern volatile uint32_t can_tx_packet_cnt[CAN_BUS_CNT];
+extern volatile uint32_t can_tx_byte_cnt[CAN_BUS_CNT];
+
 // BAUD rates for 3 CAN Buses (VERY IMPORTANT TO SET CORRECTLY!!!)
-static const uint32_t canBaudRates[3] = {
-	1000000,  // CAN1: 1 Mbps
-	1000000,  // CAN2: 1 Mbps
-	500000    // CAN3: 500 kbps
+static const uint32_t canBaudRates[CAN_BUS_CNT] = {
+    [CONTROL_BUS] = 1000000,  // 1 Mbps
+    [SENSOR_BUS] = 1000000,  // 1 Mbps
+    [TRACTIVE_BUS] = 125000,   // 500 kbps
 };
 
 // Inline function for getting CAN bus ID

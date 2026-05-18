@@ -7,7 +7,7 @@
 #include "unix_time.h"
 #include "forwarder_pb.pb.h"
 #include "cmsis_os.h"
-#include "app_layer.h"
+#include "stream.h"
 #include "log_handler.h"
 
 extern FDCAN_HandleTypeDef hfdcan1;
@@ -16,7 +16,13 @@ extern FDCAN_HandleTypeDef hfdcan3;
 extern osMessageQueueId_t canStreamQueueHandle;
 
 // Clock for 3 CAN peripherals
-volatile uint64_t unixMicroseconds[3];
+volatile uint64_t unixMicroseconds[CAN_BUS_CNT];
+
+// Per-bus packet counters
+volatile uint32_t can_rx_packet_cnt[CAN_BUS_CNT];
+volatile uint32_t can_rx_byte_cnt[CAN_BUS_CNT];
+volatile uint32_t can_tx_packet_cnt[CAN_BUS_CNT];
+volatile uint32_t can_tx_byte_cnt[CAN_BUS_CNT];
 
 /**
  * @brief Drain all messages from FDCAN FIFO and put them in canSrcQueueHandle
@@ -33,26 +39,29 @@ void drainFifoToQueue(FDCAN_HandleTypeDef *hfdcan) {
 	fifoFillLevel = HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0);
 
 	// Determine which CAN bus this is
-	uint32_t canBusId = getCANBusID(hfdcan);
+	int32_t canBusId = getCANBusID(hfdcan);
 	if (canBusId < 0) return;
 
 	// Process all messages in FIFO
 	while (fifoFillLevel > 0) {
 		// Get message from FIFO
 		if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK) {
+			uint32_t dataLength = rxHeader.DataLength; // Extract DLC
+			if (dataLength > 8) dataLength = 8; // Safety check
+
 			// Convert to CanFrame structure
 			canFrame.can_id = rxHeader.Identifier;
 			canFrame.can_bus = canBusId;
+			canFrame.can_data.size = dataLength;
 
 			// Calculate absolute timestamp in microseconds
 			canFrame.timestamp = (uint64_t)(unixMicroseconds[canBusId] + (uint64_t)rxHeader.RxTimestamp) * 1000U;
 
-			// Copy data
-			uint32_t dataLength = rxHeader.DataLength; // Extract DLC
-			if (dataLength > 8) dataLength = 8; // Safety check
+			can_rx_packet_cnt[canBusId]++;
+			can_rx_byte_cnt[canBusId] += dataLength;
 
-			memset(canFrame.can_data, 0, 8);
-			memcpy(canFrame.can_data, rxData, dataLength);
+			memset(canFrame.can_data.bytes, 0, 8);
+			memcpy(canFrame.can_data.bytes, rxData, dataLength);
 
 			// Try to put message in queue
 			if (osMessageQueuePut(canStreamQueueHandle, &canFrame, 0, 0) != osOK) {
@@ -156,9 +165,9 @@ void initCAN() {
   }
 
   // Get current UNIX time in uS. We will now use CAN Timestamp Counters from now on
-  unixMicroseconds[0] = getUnixTimeMicroseconds();
-  unixMicroseconds[1] = getUnixTimeMicroseconds();
-  unixMicroseconds[2] = getUnixTimeMicroseconds();
+  unixMicroseconds[SENSOR_BUS] = getUnixTimeMicroseconds();
+  unixMicroseconds[CONTROL_BUS] = getUnixTimeMicroseconds();
+  unixMicroseconds[TRACTIVE_BUS] = getUnixTimeMicroseconds();
 
   // Enable Timestamp Counter
   if (HAL_FDCAN_EnableTimestampCounter(&hfdcan1, FDCAN_TIMESTAMP_INTERNAL) != HAL_OK) {
@@ -231,7 +240,9 @@ int8_t sendCanFrame(uint16_t canId, uint8_t canBus, uint8_t *canData, uint8_t fr
 	if (HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &txHeader, canData) != HAL_OK) {
 		return -1; // Failed to add message to TX FIFO
 	}
-	
+
+	can_tx_packet_cnt[canBus]++;
+	can_tx_byte_cnt[canBus] += frameLen;
 	return 0; // Success
 }
 

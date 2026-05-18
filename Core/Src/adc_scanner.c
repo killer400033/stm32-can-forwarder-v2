@@ -8,7 +8,7 @@
 #include "can_driver.h"
 #include "dbc.h"
 #include "log_handler.h"
-#include "app_layer.h"
+#include "stream.h"
 
 // DMA buffers for ADC conversions (uint16_t for 12-bit ADC)
 static uint16_t adc1_dma_buffer[5];  // 5 channels for ADC1
@@ -27,8 +27,9 @@ extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
 extern ADC_HandleTypeDef hadc3;
 extern osMessageQueueId_t canStreamQueueHandle;
+extern osMessageQueueId_t storageCanQueueHandle;
 
-static void pushToWSandCAN(CanFrame *frame, uint8_t length);
+static void pushToWSandCAN(CanFrame *frame);
 
 void ADC_Scanner_Init(TIM_HandleTypeDef *htim)
 {
@@ -40,7 +41,7 @@ void ADC_Scanner_Init(TIM_HandleTypeDef *htim)
   ADCTimerInstance = htim;
 
 	#define ADC_TIM_CLK 275000000  // Timer clock frequency in Hz
-	#define ADC_SAMPLE_RATE 10  // ADC sampling rate (Hz)
+	#define ADC_SAMPLE_RATE 100  // ADC sampling rate (Hz)
 
 
   htim->Instance->PSC = 55000-1;
@@ -86,48 +87,28 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 	frame.can_bus = SENSOR_BUS;
 	frame.timestamp = getUnixTimeNanoseconds();
 
-	// Create CAN frame for coolant and oil temperature sensors (CAN ID 910)
-	CANHUB_TEMP_SENSORS_t tempMsg = {0};
-	tempMsg.OilTempSensorLeft = ((float)adc1_dma_buffer[2] * 3.3f) / 4095.0f;
-	tempMsg.OilTempSensorRight = ((float)adc1_dma_buffer[3] * 3.3f) / 4095.0f;
-	tempMsg.CoolingTempSensorLeft = ((float)adc1_dma_buffer[4] * 3.3f) / 4095.0f;
-	tempMsg.CoolingTempSensorRight = ((float)adc2_dma_buffer[2] * 3.3f) / 4095.0f;
+	// Create CAN frame for strain gauge set 1 (CAN ID 913)
+	STRAIN_GAUGES_1_t strain1Msg = {0};
+	strain1Msg.StrainGauge1 = ((float)adc1_dma_buffer[0] * 3.3f) / 4095.0f;
+	strain1Msg.StrainGauge2 = ((float)adc1_dma_buffer[1] * 3.3f) / 4095.0f;
+	strain1Msg.StrainGauge3 = ((float)adc2_dma_buffer[0] * 3.3f) / 4095.0f;
 
-	if (Pack_CANHUB_TEMP_SENSORS(&tempMsg, frame.can_data, 8) == STATUS_OK) {
-		frame.can_id = 910;
-		pushToWSandCAN(&frame, 8);
-	}
-
-	// Create CAN frame for potentiometers (CAN ID 911)
-	CANHUB_POTS_t potMsg = {0};
-	potMsg.CanhubPot1 = ((float)adc2_dma_buffer[3] * 3.3f) / 4095.0f;
-	potMsg.CanhubPot2 = ((float)adc2_dma_buffer[4] * 3.3f) / 4095.0f;
-
-	if (Pack_CANHUB_POTS(&potMsg, frame.can_data, 8) == STATUS_OK) {
-		frame.can_id = 911;
-		pushToWSandCAN(&frame, 4);
-	}
-
-	// Create CAN frame for strain gauge linkages (CAN ID 913)
-	CANHUB_STRAIN_LINKS_t strainLinkMsg = {0};
-	strainLinkMsg.LinkStrain1 = (int16_t)(((float)adc1_dma_buffer[0] * 3.3f) / 4095.0f);
-	strainLinkMsg.LinkStrain2 = (int16_t)(((float)adc1_dma_buffer[1] * 3.3f) / 4095.0f);
-	strainLinkMsg.LinkStrain3 = (int16_t)(((float)adc2_dma_buffer[0] * 3.3f) / 4095.0f);
-	strainLinkMsg.LinkStrain4 = (int16_t)(((float)adc2_dma_buffer[1] * 3.3f) / 4095.0f);
-
-	if (Pack_CANHUB_STRAIN_LINKS(&strainLinkMsg, frame.can_data, 8) == STATUS_OK) {
+	if (Pack_STRAIN_GAUGES_1(&strain1Msg, frame.can_data.bytes, 5) == STATUS_OK) {
+		frame.can_data.size = 5;
 		frame.can_id = 913;
-		pushToWSandCAN(&frame, 8);
+		pushToWSandCAN(&frame);
 	}
 
-	// Create CAN frame for strain gauge steering column (CAN ID 914)
-	CANHUB_STRAIN_STEERING_t strainSteerMsg = {0};
-	strainSteerMsg.SteeringStrain1 = (int16_t)(((float)adc3_dma_buffer[0] * 3.3f) / 4095.0f);
-	strainSteerMsg.SteeringStrain2 = (int16_t)(((float)adc3_dma_buffer[1] * 3.3f) / 4095.0f);
+	// Create CAN frame for strain gauge set 2 (CAN ID 914)
+	STRAIN_GAUGES_2_t strain2Msg = {0};
+	strain2Msg.StrainGauge4 = ((float)adc3_dma_buffer[0] * 3.3f) / 4095.0f;
+	strain2Msg.StrainGauge5 = ((float)adc3_dma_buffer[1] * 3.3f) / 4095.0f;
+	strain2Msg.StrainGauge6 = ((float)adc3_dma_buffer[1] * 3.3f) / 4095.0f;
 
-	if (Pack_CANHUB_STRAIN_STEERING(&strainSteerMsg, frame.can_data, 8) == STATUS_OK) {
+	if (Pack_STRAIN_GAUGES_2(&strain2Msg, frame.can_data.bytes, 5) == STATUS_OK) {
+		frame.can_data.size = 5;
 		frame.can_id = 914;
-		pushToWSandCAN(&frame, 4);
+		pushToWSandCAN(&frame);
 	}
 
   // Stop DMA conversions
@@ -136,7 +117,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
   HAL_ADC_Stop_DMA(&hadc3);
 }
 
-static void pushToWSandCAN(CanFrame *frame, uint8_t length)
+static void pushToWSandCAN(CanFrame *frame)
 {
   if (osMessageQueueGetSpace(canStreamQueueHandle) > 0) {
     osMessageQueuePut(canStreamQueueHandle, frame, 0, 0);
@@ -145,8 +126,12 @@ static void pushToWSandCAN(CanFrame *frame, uint8_t length)
     // TODO: Implement error handling for dropped messages
     dropped_packets++;
   }
-  if (sendCanFrame(frame->can_id, frame->can_bus, frame->can_data, length) != 0) {
+  if (sendCanFrame(frame->can_id, frame->can_bus, frame->can_data.bytes, frame->can_data.size) != 0) {
     can_send_errors++;
+  }
+
+  if (osMessageQueueGetSpace(storageCanQueueHandle) > 0) {
+  	osMessageQueuePut(storageCanQueueHandle, frame, 0, 0);
   }
 }
 

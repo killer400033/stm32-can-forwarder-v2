@@ -21,6 +21,7 @@ static UART_HandleTypeDef* uart_handle = NULL;
 // Queue for pending log transmissions
 extern osMessageQueueId_t logQueueHandle;
 extern osMessageQueueId_t storageLogQueueHandle;
+extern osMessageQueueId_t networkLogQueueHandle;
 
 // Mutex for thread-safe operations
 static osMutexId_t log_mutex = NULL;
@@ -78,6 +79,7 @@ void log_init(UART_HandleTypeDef* huart) {
         log_mutex = osMutexNew(&mutex_attr);
     }
     logTaskHandle = osThreadNew(log_task, NULL, &logTask_attributes);
+    log_msg(LL_DBG, "***********************");
     log_msg(LL_DBG, "Log handler initialized");
 }
 
@@ -144,6 +146,7 @@ void log_msg(log_level_t level, const char* format, ...) {
 
                 // Queue log message to SD card storage
                 enqueueBufferedLog(entry, storageLogQueueHandle);
+                enqueueBufferedLog(entry, networkLogQueueHandle);
                 
                 // Try to send via DMA if UART is ready
                 if (uart_handle != NULL) {
